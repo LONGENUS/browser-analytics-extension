@@ -4,10 +4,8 @@
    ============================================================================== */
 
 const APP_CONFIG = {
-  // Active environment: 'production' or 'development'
-  // When 'production', the extension queries the Vercel deployed API.
-  // When 'development', the extension falls back to local FastAPI on http://localhost:8000.
-  ENVIRONMENT: 'production',
+  // Active environment: 'development' (localhost:8000) or 'production' (Vercel)
+  ENVIRONMENT: 'development',
 
   ENVIRONMENTS: {
     production: {
