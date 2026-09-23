@@ -6,6 +6,7 @@
   "permissions": [
     "activeTab",
     "scripting",
+    "sidePanel",
     "storage",
     "tabs"
   ],
@@ -14,8 +15,12 @@
     "https://*.vercel.app/*",
     "https://*.supabase.co/*"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "action": {
-    "default_popup": "popup/popup.html",
+    "default_popup": "sidepanel.html",
+    "default_title": "WebIntel — Website Intelligence",
     "default_icon": {
       "16": "assets/icons/icon16.png",
       "48": "assets/icons/icon48.png",

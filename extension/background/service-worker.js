@@ -94,21 +94,9 @@ function updateBadge(count) {
   chrome.action.setBadgeTextColor({ color: '#ffffff' });
 }
 
-// --- Install Event ---
-chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    console.log('WebIntel installed successfully');
-    const apiBase = await getApiBase();
-    // Initialize storage
-    chrome.storage.local.set({
-      history: [],
-      cache: {},
-      analysesCount: { count: 0, date: new Date().toDateString() },
-      settings: {
-        apiBase: apiBase,
-        currency: 'INR',
-        maxHistory: 50
-      }
-    });
-  }
-});
+// --- Side Panel Behavior ---
+if (typeof chrome !== 'undefined' && chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.warn('Could not set side panel behavior:', error));
+}
+
