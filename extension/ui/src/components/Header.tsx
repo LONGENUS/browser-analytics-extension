@@ -1,9 +1,11 @@
 import React from 'react';
 import { RefreshCw, Moon, Sun, X, Globe, Sparkles } from 'lucide-react';
 import { OverviewData } from '../types';
+import { ActiveTabInfo } from '../services/api';
 
 interface HeaderProps {
-  overview: OverviewData;
+  overview?: OverviewData | null;
+  activeTabInfo?: ActiveTabInfo | null;
   isLoading: boolean;
   onRefresh: () => void;
   isDark: boolean;
@@ -13,12 +15,17 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   overview,
+  activeTabInfo,
   isLoading,
   onRefresh,
   isDark,
   onToggleTheme,
   onClose,
 }) => {
+  const domain = overview?.domain || activeTabInfo?.domain || 'Website';
+  const url = overview?.url || activeTabInfo?.url || 'No active URL';
+  const favicon = overview?.favicon || activeTabInfo?.favIconUrl;
+  const industry = overview?.industry;
   return (
     <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3">
       <div className="flex items-center justify-between mb-2">
@@ -60,9 +67,9 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 rounded-xl p-2 border border-slate-200/80 dark:border-slate-800/80">
         <div className="flex items-center gap-2.5 overflow-hidden">
           <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-soft">
-            {overview.favicon ? (
+            {favicon ? (
               <img
-                src={overview.favicon}
+                src={favicon}
                 alt=""
                 className="w-4 h-4 object-contain rounded-sm"
                 onError={(e) => {
@@ -76,16 +83,16 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 truncate">
-                {overview.domain || 'Domain'}
+                {domain}
               </span>
-              {overview.industry && (
+              {industry && (
                 <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                  • {overview.industry}
+                  • {industry}
                 </span>
               )}
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
-              {overview.url}
+              {url}
             </p>
           </div>
         </div>

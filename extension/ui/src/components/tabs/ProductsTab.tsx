@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Eye,
   Check,
+  ShoppingBag,
 } from 'lucide-react';
 import { ProductItem } from '../../types';
 import { ProductDrawer } from './ProductDrawer';
@@ -168,9 +169,22 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         )}
       </div>
 
-      {/* 2. Products Data Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-soft overflow-hidden">
-        <div className="overflow-x-auto">
+      {products.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-8 border border-slate-200 dark:border-slate-800 shadow-soft text-center space-y-2">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+            <ShoppingBag className="w-6 h-6" />
+          </div>
+          <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            No Products Detected
+          </h3>
+          <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+            No e-commerce product listings were extracted from this page. On online stores, navigate to a category, store, or product search page.
+          </p>
+        </div>
+      ) : (
+        /* 2. Products Data Table */
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-soft overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -317,6 +331,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Slide-over Product Drawer */}
       <ProductDrawer

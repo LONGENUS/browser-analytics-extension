@@ -1,117 +1,103 @@
 import React from 'react';
-import { Sparkles, TrendingUp, Lightbulb, Compass, Target, ArrowUpRight } from 'lucide-react';
+import { Sparkles, Clock, Lock, ArrowRight, Zap, Target, BarChart2 } from 'lucide-react';
 import { FullDossier } from '../../types';
 
 interface AiInsightsTabProps {
-  dossier: FullDossier;
+  dossier: FullDossier | null;
 }
 
 export const AiInsightsTab: React.FC<AiInsightsTabProps> = ({ dossier }) => {
-  const summary =
-    dossier.summary ||
-    'This is a leading e-commerce category on Amazon India featuring Ravensburger jigsaw puzzles with over 227 products, high ratings, and consistent customer demand.';
+  const domain = dossier?.domain || 'this website';
 
   return (
-    <div className="space-y-3 pb-8">
-      {/* 1. AI Summary Card */}
-      <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-900 dark:to-slate-900/60 rounded-xl p-3.5 border border-blue-100 dark:border-blue-900/40 shadow-soft">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5" />
+    <div className="space-y-4 pb-8">
+      {/* 1. Coming Soon Hero Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 p-6 text-white shadow-xl">
+        {/* Subtle decorative circles */}
+        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
+        <div className="absolute -left-8 -bottom-8 w-32 h-32 rounded-full bg-purple-500/20 blur-xl pointer-events-none" />
+
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md text-white border border-white/20">
+              <Clock className="w-3 h-3" /> Coming Soon
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
           </div>
-          <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-            AI Executive Summary
-          </span>
+
+          <h2 className="text-base font-bold tracking-tight text-white mb-1.5">
+            AI Strategic Intelligence
+          </h2>
+          <p className="text-xs text-blue-100/90 leading-relaxed">
+            Autonomous multi-modal intelligence for <strong className="text-white">{domain}</strong> is currently in development. High-fidelity predictive market modeling and competitive gap audits will be available in the next release.
+          </p>
         </div>
-        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-          {summary}
+      </div>
+
+      {/* 2. Upcoming Capabilities Roadmap */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-soft space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              Roadmap Capabilities
+            </h3>
+          </div>
+          <span className="text-[10px] font-semibold text-slate-400">v2.1 Feature Set</span>
+        </div>
+
+        <div className="space-y-2.5 text-xs">
+          <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
+            <div className="p-1 rounded bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+              <Zap className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                Predictive Pricing & Elasticity
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                AI price-point simulation analyzing historical margin, competitor indexing, and customer willingness to pay.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
+            <div className="p-1 rounded bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5">
+              <BarChart2 className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                SERP & Search Term Gap Audit
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Uncovers high-volume, low-competition keywords where competitors are capturing search traffic.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800">
+            <div className="p-1 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+              <Lock className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                Competitive Moat & Vulnerability Radar
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Synthesizes supply-chain vulnerabilities, pricing shifts, and customer sentiment signals into executive actions.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Status Notification */}
+      <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-center">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          This feature is currently disabled and undergoing final model fine-tuning.
         </p>
-      </div>
-
-      {/* 2. Key Insights Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-soft space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-purple-600" />
-          <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-            Key Insights
-          </h3>
-        </div>
-
-        <ul className="space-y-2 text-xs">
-          <li className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <span className="text-purple-600 font-bold shrink-0">✦</span>
-            <div className="text-slate-700 dark:text-slate-300">
-              <strong>Highest priced product:</strong> ₹9,999 (Collector's 5000 Piece Edition)
-            </div>
-          </li>
-
-          <li className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <span className="text-blue-600 font-bold shrink-0">✦</span>
-            <div className="text-slate-700 dark:text-slate-300">
-              <strong>Dominant category piece count:</strong> 1000 pieces represents 48% of total catalog listings
-            </div>
-          </li>
-
-          <li className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <span className="text-emerald-600 font-bold shrink-0">✦</span>
-            <div className="text-slate-700 dark:text-slate-300">
-              <strong>Market leadership:</strong> Ravensburger, Clementoni, and Trefl account for 85% of reviews
-            </div>
-          </li>
-
-          <li className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <span className="text-amber-600 font-bold shrink-0">✦</span>
-            <div className="text-slate-700 dark:text-slate-300">
-              <strong>Price range density:</strong> Sweet spot is ₹1,299 – ₹2,499 with Prime 1-day delivery
-            </div>
-          </li>
-
-          <li className="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-            <span className="text-rose-600 font-bold shrink-0">✦</span>
-            <div className="text-slate-700 dark:text-slate-300">
-              <strong>Stock velocity:</strong> 12% of high-rated puzzles currently low on inventory
-            </div>
-          </li>
-        </ul>
-      </div>
-
-      {/* 3. Strategic Market Opportunities */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-soft space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Lightbulb className="w-4 h-4 text-amber-500" />
-          <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-            Growth & Competitive Opportunities
-          </h3>
-        </div>
-
-        <div className="space-y-2 text-xs">
-          <div className="p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 text-emerald-900 dark:text-emerald-200">
-            <div className="font-bold flex items-center gap-1 mb-0.5">
-              <ArrowUpRight className="w-3.5 h-3.5" /> High Demand Surge
-            </div>
-            <p className="text-[11px] text-emerald-800 dark:text-emerald-300">
-              Demand for adult educational and architectural landscape puzzles grew +34% QoQ.
-            </p>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-blue-900 dark:text-blue-200">
-            <div className="font-bold flex items-center gap-1 mb-0.5">
-              <ArrowUpRight className="w-3.5 h-3.5" /> Keyword Gaps
-            </div>
-            <p className="text-[11px] text-blue-800 dark:text-blue-300">
-              Opportunity to target long-tail search terms like "wooden puzzle 1000 piece" and "panoramic jigsaw".
-            </p>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/60 dark:border-purple-900/40 text-purple-900 dark:text-purple-200">
-            <div className="font-bold flex items-center gap-1 mb-0.5">
-              <ArrowUpRight className="w-3.5 h-3.5" /> Bundle Potential
-            </div>
-            <p className="text-[11px] text-purple-800 dark:text-purple-300">
-              High cross-sell affinity with puzzle roll-up mats and framing accessories.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );

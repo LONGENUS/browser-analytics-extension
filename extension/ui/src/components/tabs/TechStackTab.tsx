@@ -12,7 +12,7 @@ export const TechStackTab: React.FC<TechStackTabProps> = ({ dossier }) => {
   const [selectedTech, setSelectedTech] = useState<TechItem | null>(null);
 
   const techData = dossier.tech_stack || {
-    total_detected: 24,
+    total_detected: 0,
     categories: {},
     technologies: [],
   };
