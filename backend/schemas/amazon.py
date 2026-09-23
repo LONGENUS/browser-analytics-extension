@@ -5,11 +5,11 @@ CSS selectors for Amazon search/category pages.
 
 AMAZON_SCHEMA = {
     "name": "Amazon Product Extractor",
-    "baseSelector": "[data-component-type='s-search-result'], .s-result-item[data-asin]",
+    "baseSelector": "div.s-result-item[data-asin]:not([data-asin='']), [data-component-type='s-search-result']",
     "fields": [
         {
             "name": "title",
-            "selector": "h2 a span, h2 span.a-text-normal",
+            "selector": "h2 span, h2 a span, a.s-line-clamp-3 span, h2, a.s-line-clamp-2 span, h2 [class*='text-normal']",
             "type": "text"
         },
         {
@@ -29,7 +29,7 @@ AMAZON_SCHEMA = {
         },
         {
             "name": "link",
-            "selector": "h2 a.a-link-normal",
+            "selector": "a.a-link-normal.s-no-outline, a.a-link-normal[href*='/dp/'], h2 a.a-link-normal, a.s-line-clamp-3",
             "type": "attribute",
             "attribute": "href"
         },
@@ -56,21 +56,21 @@ AMAZON_SCHEMA = {
 # Schema for Amazon product detail pages
 AMAZON_PRODUCT_DETAIL_SCHEMA = {
     "name": "Amazon Product Detail",
-    "baseSelector": "#dp-container, #ppd",
+    "baseSelector": "#dp-container, #ppd, #centerCol, body",
     "fields": [
         {
             "name": "title",
-            "selector": "#productTitle, #title span",
+            "selector": "#productTitle, #title span, h1#title",
             "type": "text"
         },
         {
             "name": "price",
-            "selector": ".a-price .a-offscreen, #priceblock_ourprice, #priceblock_dealprice, .priceToPay .a-offscreen",
+            "selector": ".a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .a-offscreen, .priceToPay .a-offscreen, #priceblock_ourprice, #priceblock_dealprice, #corePrice_desktop .a-price .a-offscreen, .apexPriceToPay .a-offscreen",
             "type": "text"
         },
         {
             "name": "rating",
-            "selector": "#acrPopover .a-icon-alt, .a-icon-alt",
+            "selector": "#acrPopover .a-icon-alt, #averageCustomerReviews .a-icon-alt, .a-icon-alt",
             "type": "text"
         },
         {
@@ -80,12 +80,12 @@ AMAZON_PRODUCT_DETAIL_SCHEMA = {
         },
         {
             "name": "brand",
-            "selector": "#bylineInfo, a#bylineInfo",
+            "selector": "#bylineInfo, a#bylineInfo, #brand, a#brand",
             "type": "text"
         },
         {
             "name": "image",
-            "selector": "#landingImage, #imgBlkFront",
+            "selector": "#landingImage, #imgBlkFront, #main-image, img[data-a-image-name='landingImage']",
             "type": "attribute",
             "attribute": "src"
         },

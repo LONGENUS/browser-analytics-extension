@@ -18,7 +18,7 @@ from crawl4ai import (
 )
 
 from config import settings
-from schemas.amazon import AMAZON_SCHEMA
+from schemas.amazon import AMAZON_SCHEMA, AMAZON_PRODUCT_DETAIL_SCHEMA
 from schemas.flipkart import FLIPKART_SCHEMA
 from schemas.generic import GENERIC_SCHEMA
 
@@ -51,13 +51,18 @@ class CrawlService:
             print("[CRAWL] Crawl4AI browser closed")
 
     def _detect_domain(self, url: str) -> str:
-        """Detect the domain category from a URL."""
-        hostname = urlparse(url).hostname or ""
-        hostname = hostname.lower()
+        """Detect the domain category and page type from a URL."""
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        path = parsed.path
 
         if "amazon" in hostname:
+            if "/dp/" in path or "/gp/product/" in path or re.search(r'/[A-Z0-9]{10}(?:[/?]|$)', path):
+                return "amazon_product"
             return "amazon"
         elif "flipkart" in hostname:
+            if "/p/" in path:
+                return "flipkart_product"
             return "flipkart"
         else:
             return "generic"
@@ -66,7 +71,9 @@ class CrawlService:
         """Return the appropriate extraction schema for the domain."""
         schemas = {
             "amazon": AMAZON_SCHEMA,
+            "amazon_product": AMAZON_PRODUCT_DETAIL_SCHEMA,
             "flipkart": FLIPKART_SCHEMA,
+            "flipkart_product": FLIPKART_SCHEMA,
             "generic": GENERIC_SCHEMA,
         }
 
@@ -94,7 +101,7 @@ class CrawlService:
         """
         async with self._semaphore:
             if not self._crawler:
-                raise RuntimeError("Crawler not initialized. Call start() first.")
+                await self.start()
 
             domain = self._detect_domain(url)
             extraction_strategy = self._get_extraction_strategy(domain)
@@ -108,8 +115,17 @@ class CrawlService:
                 scan_full_page=False,  # Avoid extra scroll delays on detail pages
             )
 
-            # Execute the crawl
-            result = await self._crawler.arun(url=url, config=run_config)
+            # Execute the crawl (with automatic browser reconnect if connection dropped)
+            try:
+                result = await self._crawler.arun(url=url, config=run_config)
+            except Exception as crawl_err:
+                print(f"[WARN] Crawl error encountered ({crawl_err}). Reconnecting browser instance...")
+                try:
+                    await self.stop()
+                except Exception:
+                    pass
+                await self.start()
+                result = await self._crawler.arun(url=url, config=run_config)
 
             if not result.success:
                 raise RuntimeError(
@@ -129,7 +145,33 @@ class CrawlService:
                     products = []
 
             # Clean and normalize products
-            products = self._normalize_products(products, domain)
+            products = self._normalize_products(products, domain, url)
+
+            # Fallback for Amazon product detail pages if schema didn't catch fields
+            if domain == "amazon_product" and not products:
+                raw_title = (result.metadata.get("title") or "") if result.metadata else ""
+                clean_title = re.sub(r'\s*:\s*Amazon\.[a-z.]+(?::.*)?$', '', raw_title, flags=re.IGNORECASE).strip()
+                if clean_title:
+                    asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url)
+                    asin = asin_match.group(1) if asin_match else ""
+                    # Look for price in html
+                    price = None
+                    price_match = re.search(r'class="a-price-whole"[^>]*>([0-9,]+)', result.html or "")
+                    if price_match:
+                        try:
+                            price = float(price_match.group(1).replace(',', ''))
+                        except ValueError:
+                            pass
+                    products.append({
+                        "title": clean_title,
+                        "price": price,
+                        "rating": None,
+                        "reviews": "",
+                        "brand": "",
+                        "url": url,
+                        "image_url": "",
+                        "asin": asin,
+                    })
 
             # Extract metadata from HTML
             metadata = self._extract_metadata(result)
@@ -137,7 +179,7 @@ class CrawlService:
             return {
                 "url": url,
                 "domain": domain,
-                "title": result.metadata.get("title", "") if result.metadata else "",
+                "title": (result.metadata.get("title") or "") if result.metadata else "",
                 "html_length": len(result.html or ""),
                 "products": products,
                 "links": self._extract_links(result),
@@ -146,7 +188,7 @@ class CrawlService:
                 "raw_markdown": (result.markdown or "")[:5000],  # First 5K chars
             }
 
-    def _normalize_products(self, products: list, domain: str) -> list:
+    def _normalize_products(self, products: list, domain: str, page_url: str = "") -> list:
         """Clean and normalize extracted product data."""
         normalized = []
 
@@ -154,20 +196,44 @@ class CrawlService:
             if not isinstance(p, dict):
                 continue
 
+            title = self._clean_text(p.get("title", ""))
+            # Require minimum title length to eliminate empty container matches
+            if not title or len(title) < 2:
+                continue
+
+            product_url = p.get("link", p.get("url", ""))
+            asin = p.get("asin", "")
+
+            # Fix relative URLs
+            if product_url and not product_url.startswith("http"):
+                if page_url:
+                    parsed_base = urlparse(page_url)
+                    prefix = "" if product_url.startswith("/") else "/"
+                    product_url = f"{parsed_base.scheme}://{parsed_base.netloc}{prefix}{product_url}"
+
+            # Extract ASIN from URL if missing and domain is Amazon
+            if not asin and "amazon" in domain:
+                target_url = product_url or page_url
+                asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', target_url)
+                if asin_match:
+                    asin = asin_match.group(1)
+
+            if not product_url and "amazon" in domain and asin and page_url:
+                parsed_base = urlparse(page_url)
+                product_url = f"{parsed_base.scheme}://{parsed_base.netloc}/dp/{asin}"
+
             product = {
-                "title": self._clean_text(p.get("title", "")),
+                "title": title,
                 "price": self._parse_price(p.get("price", "")),
                 "rating": self._parse_rating(p.get("rating", "")),
                 "reviews": self._clean_text(p.get("reviews", "")),
                 "brand": self._clean_text(p.get("brand", "")),
-                "url": p.get("link", p.get("url", "")),
+                "url": product_url or page_url,
                 "image_url": p.get("image", p.get("image_url", "")),
-                "asin": p.get("asin", ""),
+                "asin": asin,
             }
 
-            # Skip empty products
-            if product["title"] or product["price"]:
-                normalized.append(product)
+            normalized.append(product)
 
         return normalized
 
@@ -216,10 +282,10 @@ class CrawlService:
         metadata = {}
         if result.metadata:
             metadata = {
-                "title": result.metadata.get("title", ""),
-                "description": result.metadata.get("description", ""),
-                "keywords": result.metadata.get("keywords", ""),
-                "author": result.metadata.get("author", ""),
+                "title": (result.metadata.get("title") or "").strip(),
+                "description": (result.metadata.get("description") or "").strip(),
+                "keywords": (result.metadata.get("keywords") or "").strip(),
+                "author": (result.metadata.get("author") or "").strip(),
             }
         return metadata
 

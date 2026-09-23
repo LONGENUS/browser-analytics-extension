@@ -31,7 +31,7 @@ class SummarizerService:
         """Generate a structured summary without AI."""
         domain = crawl_result.get("domain", "generic")
         url = crawl_result.get("url", "")
-        title = crawl_result.get("title", "the page")
+        title = (crawl_result.get("title") or "the page").strip()
         products = crawl_result.get("products", [])
         product_analytics = analytics.get("analytics", {})
         seo = analytics.get("seo", {})
@@ -43,14 +43,15 @@ class SummarizerService:
         unique = product_analytics.get("unique_products", 0)
 
         if total > 0:
-            domain_label = domain.title() if domain != "generic" else "this website"
+            domain_label = domain.replace("_", " ").title() if domain != "generic" else "this website"
             parts.append(
                 f"Analyzed {domain_label} page and found {total} products "
                 f"({unique} unique) across the page."
             )
         else:
+            safe_title = title[:60] if title else "this page"
             parts.append(
-                f"Analyzed the page \"{title[:60]}\" but no structured product data was detected. "
+                f"Analyzed the page \"{safe_title}\" but no structured product data was detected. "
                 f"The page may be a non-product page or use a layout not yet supported."
             )
 
@@ -59,11 +60,13 @@ class SummarizerService:
         min_price = product_analytics.get("min_price")
         max_price = product_analytics.get("max_price")
 
-        if avg_price:
+        if avg_price is not None and min_price is not None and max_price is not None:
             parts.append(
                 f"Prices range from ₹{min_price:,.0f} to ₹{max_price:,.0f}, "
                 f"with an average of ₹{avg_price:,.0f}."
             )
+        elif avg_price is not None:
+            parts.append(f"Average price is ₹{avg_price:,.0f}.")
 
         # Brand insights
         unique_brands = product_analytics.get("unique_brands", 0)

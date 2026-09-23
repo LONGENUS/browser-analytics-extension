@@ -6,8 +6,15 @@ Entry point for the backend API server.
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True, encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True, encoding="utf-8")
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import settings
 from routes.analyze import router as analyze_router
@@ -31,7 +38,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize the global crawler instance
     crawler_service = CrawlService()
-    await crawler_service.start()
+    try:
+        await crawler_service.start()
+    except Exception as e:
+        print(f"[WARN] Crawler initial startup warning: {e}")
     app.state.crawler = crawler_service
 
     print(f"[OK] {settings.APP_NAME} v{settings.APP_VERSION} started")
@@ -40,7 +50,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # --- Shutdown ---
-    await crawler_service.stop()
+    if hasattr(app.state, "crawler") and app.state.crawler:
+        await app.state.crawler.stop()
     print(f"[STOP] {settings.APP_NAME} shut down")
 
 
@@ -51,6 +62,16 @@ app = FastAPI(
     description="AI-powered website intelligence and analytics API",
     lifespan=lifespan,
 )
+
+# --- Global Exception Handler ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__}
+    )
 
 # --- CORS Middleware ---
 app.add_middleware(
