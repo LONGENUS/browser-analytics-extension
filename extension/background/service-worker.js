@@ -2,7 +2,20 @@
    WebIntel — Background Service Worker
    ======================================== */
 
-const API_BASE = 'http://localhost:8000';
+try {
+  importScripts('../config.js');
+} catch (e) {
+  console.warn('Could not import config.js into service worker context:', e);
+}
+
+async function getApiBase() {
+  if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.getBaseUrl) {
+    try {
+      return await APP_CONFIG.getBaseUrl();
+    } catch (_) {}
+  }
+  return (typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.API_BASE_URL : 'http://localhost:8000');
+}
 
 // --- Message Handler ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -30,7 +43,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // --- API Calls ---
 async function analyzeUrl(url, title) {
-  const response = await fetch(`${API_BASE}/analyze`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, title })
@@ -45,7 +59,8 @@ async function analyzeUrl(url, title) {
 }
 
 async function exportData(format, data) {
-  const response = await fetch(`${API_BASE}/export/${format}`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/export/${format}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -59,7 +74,8 @@ async function exportData(format, data) {
 }
 
 async function getHistory() {
-  const response = await fetch(`${API_BASE}/history`, {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/history`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
   });
@@ -79,16 +95,17 @@ function updateBadge(count) {
 }
 
 // --- Install Event ---
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
     console.log('WebIntel installed successfully');
+    const apiBase = await getApiBase();
     // Initialize storage
     chrome.storage.local.set({
       history: [],
       cache: {},
       analysesCount: { count: 0, date: new Date().toDateString() },
       settings: {
-        apiBase: API_BASE,
+        apiBase: apiBase,
         currency: 'INR',
         maxHistory: 50
       }

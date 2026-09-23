@@ -5,12 +5,16 @@
 const ApiClient = (() => {
   'use strict';
 
-  let baseUrl = 'http://localhost:8000';
+  let baseUrl = (typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.API_BASE_URL : 'http://localhost:8000');
   const DEFAULT_TIMEOUT = 60000; // 60 seconds for crawling
 
   // --- Configuration ---
   function setBaseUrl(url) {
     baseUrl = url.replace(/\/$/, '');
+  }
+
+  function getBaseUrl() {
+    return baseUrl;
   }
 
   // --- Core Request ---
@@ -21,6 +25,12 @@ const ApiClient = (() => {
       timeout = DEFAULT_TIMEOUT,
       responseType = 'json'
     } = options;
+
+    if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.getBaseUrl && baseUrl === APP_CONFIG.API_BASE_URL) {
+      try {
+        baseUrl = await APP_CONFIG.getBaseUrl();
+      } catch (_) {}
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -145,6 +155,7 @@ const ApiClient = (() => {
   // --- Public API ---
   return {
     setBaseUrl,
+    getBaseUrl,
     analyzeUrl,
     getHistory,
     getAnalysis,

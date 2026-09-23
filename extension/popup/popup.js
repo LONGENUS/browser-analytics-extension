@@ -7,7 +7,7 @@
 
   // --- Configuration ---
   const CONFIG = {
-    API_BASE: 'http://localhost:8000',
+    API_BASE: (typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.API_BASE_URL : 'http://localhost:8000'),
     ITEMS_PER_PAGE: 10,
     MAX_HISTORY: 50,
     CACHE_TTL_MS: 3600000 // 1 hour
@@ -81,6 +81,11 @@
 
   // --- Initialize ---
   async function init() {
+    if (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.getBaseUrl) {
+      try {
+        CONFIG.API_BASE = await APP_CONFIG.getBaseUrl();
+      } catch (_) {}
+    }
     detectCurrentTab();
     loadAnalysesCount();
     bindEvents();

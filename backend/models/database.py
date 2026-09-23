@@ -18,7 +18,8 @@ from config import settings
 
 # --- Engine & Session ---
 # Detect if using SQLite (no pool_size/max_overflow needed)
-_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_db_url = settings.async_database_url
+_is_sqlite = _db_url.startswith("sqlite")
 
 _engine_kwargs = {
     "echo": settings.DEBUG,
@@ -31,7 +32,7 @@ if not _is_sqlite:
     })
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    _db_url,
     **_engine_kwargs,
 )
 
@@ -56,6 +57,9 @@ class Analysis(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     url: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     domain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -78,6 +82,7 @@ class Analysis(Base):
     def to_dict(self):
         return {
             "id": self.id,
+            "user_id": self.user_id,
             "url": self.url,
             "domain": self.domain,
             "title": self.title,
