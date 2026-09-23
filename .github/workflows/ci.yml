@@ -2,24 +2,42 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/* ]
   pull_request:
     branches: [ main ]
 
 jobs:
   validate-extension:
-    name: Validate Chrome Extension Manifest
+    name: Validate Chrome Extension & Config
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate manifest.json syntax
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate manifest.json syntax & fields
         run: |
-          python3 -c "import json; m = json.load(open('extension/manifest.json')); assert m['manifest_version'] == 3; print('Manifest V3 valid:', m['name'], m['version'])"
+          node -e "
+            const manifest = require('./extension/manifest.json');
+            if (manifest.manifest_version !== 3) throw new Error('Expected Manifest V3');
+            if (!manifest.host_permissions || !manifest.host_permissions.length) throw new Error('Missing host_permissions');
+            console.log('Manifest V3 valid:', manifest.name, 'v' + manifest.version);
+          "
+
+      - name: Validate extension JavaScript syntax
+        run: |
+          node -c extension/config.js
+          node -c extension/utils/api.js
+          node -c extension/background/service-worker.js
+          node -c extension/popup/popup.js
+          echo "Extension JS syntax valid"
 
   validate-backend:
-    name: Validate Backend Code
+    name: Validate Backend & Serverless API
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -39,4 +57,36 @@ jobs:
 
       - name: Syntax check Python files
         run: |
-          python -m compileall backend/
+          python -m compileall backend/ api/
+          echo "Backend and API compile check passed"
+
+  validate-deployment-specs:
+    name: Validate Vercel & Supabase Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate vercel.json
+        run: |
+          node -e "
+            const config = require('./vercel.json');
+            if (!config.rewrites && !config.routes) throw new Error('Missing rewrites in vercel.json');
+            console.log('vercel.json is valid');
+          "
+
+      - name: Validate Supabase SQL migration files
+        run: |
+          test -f supabase/migrations/20260923000001_create_schema.sql
+          python3 -c "
+          with open('supabase/migrations/20260923000001_create_schema.sql') as f:
+              sql = f.read()
+              assert 'CREATE TABLE' in sql
+              assert 'ENABLE ROW LEVEL SECURITY' in sql
+              print('Supabase migration SQL schema verified')
+          "
