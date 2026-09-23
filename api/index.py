@@ -108,7 +108,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Health Check & Root Endpoints
 @app.get("/")
 @app.get("/health")
-async def health():
+async def health(request: Request):
     if _init_error:
         return JSONResponse(
             status_code=500,
@@ -117,8 +117,10 @@ async def health():
     return {
         "status": "healthy",
         "app": "WebIntel",
-        "version": "1.0.0",
-        "platform": "vercel-serverless"
+        "version": "1.0.2",
+        "platform": "vercel-serverless",
+        "scope_path": request.scope.get("path"),
+        "headers": {k: v for k, v in request.headers.items() if "auth" not in k.lower()}
     }
 
 
