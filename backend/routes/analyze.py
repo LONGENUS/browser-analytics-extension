@@ -116,6 +116,8 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[ERROR] Analysis failed for {url}: {e}")
         raise HTTPException(
             status_code=500,

@@ -199,15 +199,20 @@ class AnalyticsService:
 
     def _compute_seo(self, metadata: dict, links: list, images: list, url: str) -> dict:
         """Compute SEO audit metrics."""
-        meta_title = metadata.get("title", "")
-        meta_description = metadata.get("description", "")
+        metadata = metadata or {}
+        links = links or []
+        images = images or []
+
+        meta_title = (metadata.get("title") or "").strip()
+        meta_description = (metadata.get("description") or "").strip()
+        meta_keywords = (metadata.get("keywords") or "").strip()
 
         return {
             "meta_title": meta_title,
             "meta_title_length": len(meta_title),
             "meta_description": meta_description,
             "meta_description_length": len(meta_description),
-            "meta_keywords": metadata.get("keywords", ""),
+            "meta_keywords": meta_keywords,
 
             # Heading analysis (approximate from metadata)
             "h1_count": None,  # Will be populated from content script data
@@ -215,8 +220,8 @@ class AnalyticsService:
 
             # Links
             "link_count": len(links),
-            "internal_links": sum(1 for l in links if self._is_internal_link(l, url)),
-            "external_links": sum(1 for l in links if not self._is_internal_link(l, url)),
+            "internal_links": sum(1 for l in links if l and self._is_internal_link(l, url)),
+            "external_links": sum(1 for l in links if l and not self._is_internal_link(l, url)),
 
             # Images
             "image_count": len(images),
@@ -240,22 +245,24 @@ class AnalyticsService:
         except Exception:
             return False
 
-    def _score_title(self, title: str) -> str:
+    def _score_title(self, title: Optional[str]) -> str:
         """Score the meta title quality."""
         if not title:
             return "missing"
-        if len(title) < 30:
+        title_len = len(title)
+        if title_len < 30:
             return "too_short"
-        if len(title) > 60:
+        if title_len > 60:
             return "too_long"
         return "good"
 
-    def _score_description(self, description: str) -> str:
+    def _score_description(self, description: Optional[str]) -> str:
         """Score the meta description quality."""
         if not description:
             return "missing"
-        if len(description) < 70:
+        desc_len = len(description)
+        if desc_len < 70:
             return "too_short"
-        if len(description) > 160:
+        if desc_len > 160:
             return "too_long"
         return "good"
