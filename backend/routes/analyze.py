@@ -29,6 +29,9 @@ class AnalyzeResponse(BaseModel):
     summary: str = ""
     overview: dict = {}
     products_intelligence: dict = {}
+    seo_intelligence: dict = {}
+    tech_stack: dict = {}
+    traffic: dict = {}
     analytics: dict = {}
     seo: dict = {}
     products: list = []
@@ -106,7 +109,46 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
                 "reason": str(p_err),
             }
 
-        # Step 4: Compute analytics
+        # Step 4: SEO Intelligence Engine (Module 3)
+        seo_intelligence = {}
+        try:
+            from services.seo import seo_service
+            seo_intelligence = seo_service.analyze(crawl_result)
+        except Exception as s_err:
+            print(f"[WARN] SEO intelligence extraction failed: {s_err}")
+            seo_intelligence = {
+                "module": "seo",
+                "status": "failed",
+                "reason": str(s_err),
+            }
+
+        # Step 5: Technology Detection Engine (Module 4)
+        tech_stack = {}
+        try:
+            from services.techstack import techstack_service
+            tech_stack = techstack_service.analyze(crawl_result)
+        except Exception as t_err:
+            print(f"[WARN] Technology detection failed: {t_err}")
+            tech_stack = {
+                "module": "techstack",
+                "status": "failed",
+                "reason": str(t_err),
+            }
+
+        # Step 6: Website Traffic Analytics (Module 5)
+        traffic_data = {}
+        try:
+            from services.traffic import traffic_service
+            traffic_data = traffic_service.analyze(crawl_result)
+        except Exception as tr_err:
+            print(f"[WARN] Traffic analytics failed: {tr_err}")
+            traffic_data = {
+                "module": "traffic",
+                "status": "failed",
+                "reason": str(tr_err),
+            }
+
+        # Step 7: Compute analytics (Preserve backward compatibility)
         analytics_service = AnalyticsService()
         analytics_data = analytics_service.compute(crawl_result)
         if isinstance(product_intelligence, dict) and "analytics" in product_intelligence:
@@ -118,11 +160,11 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
             an_dict["duplicate_asins"] = prod_an.get("duplicate_asins", 0)
             an_dict["discount_distribution"] = prod_an.get("discount_distribution", {})
 
-        # Step 5: Generate AI summary
+        # Step 8: Generate AI summary
         summarizer = SummarizerService()
         summary = await summarizer.summarize(crawl_result, analytics_data)
 
-        # Step 6: Store in database (try, but don't fail if DB is unavailable)
+        # Step 9: Store in database (try, but don't fail if DB is unavailable)
         analysis_id = ""
         try:
             from models.database import AsyncSessionLocal, Analysis
@@ -145,7 +187,7 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
         except Exception as db_err:
             print(f"[WARN] Database storage skipped: {db_err}")
 
-        # Step 7: Build response
+        # Step 10: Build response with complete backward compatibility
         from datetime import datetime, timezone
 
         return AnalyzeResponse(
@@ -157,6 +199,9 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
             summary=summary,
             overview=overview_data,
             products_intelligence=product_intelligence,
+            seo_intelligence=seo_intelligence,
+            tech_stack=tech_stack,
+            traffic=traffic_data,
             analytics=analytics_data.get("analytics", {}),
             seo=analytics_data.get("seo", {}),
             products=crawl_result.get("products", []),
