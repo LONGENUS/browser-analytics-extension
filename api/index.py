@@ -4,8 +4,10 @@ Provides FastAPI entrypoint for Vercel Serverless Functions with zero-downtime f
 """
 
 import os
+import re
 import sys
 import traceback
+import urllib.parse
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,15 +32,31 @@ app.add_middleware(
 # Route Normalization Middleware for Vercel Serverless
 @app.middleware("http")
 async def strip_vercel_prefix(request: Request, call_next):
-    # Detect original request path from Vercel-injected routing headers
-    path = (
-        request.headers.get("x-invoke-path")
-        or request.headers.get("x-matched-path")
-        or request.headers.get("x-real-path")
-        or request.scope.get("path", "")
-    )
+    raw_qs = request.scope.get("query_string", b"").decode("utf-8")
+    path = request.scope.get("path", "")
+
+    # Extract __path__ query param injected by Vercel rewrites if present
+    if "__path__" in raw_qs:
+        parsed_qs = urllib.parse.parse_qs(raw_qs, keep_blank_values=True)
+        path = parsed_qs.pop("__path__", [""])[0] or "/"
+        new_qs = urllib.parse.urlencode([(k, v) for k, vs in parsed_qs.items() for v in vs])
+        request.scope["query_string"] = new_qs.encode("utf-8")
+    else:
+        # Check potential header fallbacks
+        path = (
+            request.headers.get("x-invoke-path")
+            or request.headers.get("x-matched-path")
+            or request.headers.get("x-real-path")
+            or path
+        )
+
     if "?" in path:
         path = path.split("?")[0]
+
+    # Normalize slashes
+    path = re.sub(r"/+", "/", path)
+    if not path.startswith("/"):
+        path = "/" + path
 
     # Normalize Vercel / serverless routing prefixes
     if path.startswith("/api/index.py"):
@@ -47,6 +65,8 @@ async def strip_vercel_prefix(request: Request, call_next):
         path = path[len("/api"):] or "/"
     elif path == "/api":
         path = "/"
+
+    path = re.sub(r"/+", "/", path)
 
     request.scope["path"] = path
     if "raw_path" in request.scope:
