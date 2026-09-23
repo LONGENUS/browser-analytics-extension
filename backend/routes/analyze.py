@@ -59,8 +59,13 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid URL format")
 
-    # Get crawler from app state
-    crawler = request.app.state.crawler
+    # Get crawler from app state (or initialize on demand if needed)
+    crawler = getattr(request.app.state, "crawler", None)
+    if not crawler:
+        from services.crawler import CrawlService
+        crawler = CrawlService()
+        await crawler.start()
+        request.app.state.crawler = crawler
 
     try:
         # Step 1: Crawl the page

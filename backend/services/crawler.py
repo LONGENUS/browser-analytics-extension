@@ -101,7 +101,7 @@ class CrawlService:
         """
         async with self._semaphore:
             if not self._crawler:
-                raise RuntimeError("Crawler not initialized. Call start() first.")
+                await self.start()
 
             domain = self._detect_domain(url)
             extraction_strategy = self._get_extraction_strategy(domain)
@@ -115,8 +115,17 @@ class CrawlService:
                 scan_full_page=False,  # Avoid extra scroll delays on detail pages
             )
 
-            # Execute the crawl
-            result = await self._crawler.arun(url=url, config=run_config)
+            # Execute the crawl (with automatic browser reconnect if connection dropped)
+            try:
+                result = await self._crawler.arun(url=url, config=run_config)
+            except Exception as crawl_err:
+                print(f"[WARN] Crawl error encountered ({crawl_err}). Reconnecting browser instance...")
+                try:
+                    await self.stop()
+                except Exception:
+                    pass
+                await self.start()
+                result = await self._crawler.arun(url=url, config=run_config)
 
             if not result.success:
                 raise RuntimeError(
