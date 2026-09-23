@@ -30,11 +30,28 @@ app.add_middleware(
 # Route Normalization Middleware for Vercel Serverless
 @app.middleware("http")
 async def strip_vercel_prefix(request: Request, call_next):
-    path = request.scope.get("path", "")
+    # Detect original request path from Vercel-injected routing headers
+    path = (
+        request.headers.get("x-invoke-path")
+        or request.headers.get("x-matched-path")
+        or request.headers.get("x-real-path")
+        or request.scope.get("path", "")
+    )
+    if "?" in path:
+        path = path.split("?")[0]
+
+    # Normalize Vercel / serverless routing prefixes
     if path.startswith("/api/index.py"):
-        request.scope["path"] = path[len("/api/index.py"):] or "/"
-    elif path.startswith("/api") and len(path) > 4:
-        request.scope["path"] = path[len("/api"):] or "/"
+        path = path[len("/api/index.py"):] or "/"
+    elif path.startswith("/api/") and len(path) > 5:
+        path = path[len("/api"):] or "/"
+    elif path == "/api":
+        path = "/"
+
+    request.scope["path"] = path
+    if "raw_path" in request.scope:
+        request.scope["raw_path"] = path.encode("utf-8")
+
     if _init_error and request.scope["path"] not in ("/", "/health", "/debug"):
         return JSONResponse(
             status_code=500,
@@ -106,10 +123,12 @@ async def health():
 
 
 @app.get("/debug")
-async def debug():
+async def debug(request: Request):
     return {
         "init_error": _init_error,
         "cwd": os.getcwd(),
         "files": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else [],
-        "sys_path": sys.path
+        "sys_path": sys.path,
+        "scope_path": request.scope.get("path"),
+        "headers": {k: v for k, v in request.headers.items() if "auth" not in k.lower()}
     }
