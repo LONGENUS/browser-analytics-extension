@@ -21,6 +21,7 @@ from routes.analyze import router as analyze_router
 from routes.export import router as export_router
 from routes.history import router as history_router
 from routes.overview import router as overview_router
+from routes.products import router as products_router
 
 
 @asynccontextmanager
@@ -92,6 +93,7 @@ app.add_middleware(
 # --- Include Routers ---
 app.include_router(analyze_router, tags=["Analysis"])
 app.include_router(overview_router, prefix="/overview", tags=["Overview"])
+app.include_router(products_router, prefix="/products", tags=["Products"])
 app.include_router(export_router, prefix="/export", tags=["Export"])
 app.include_router(history_router, prefix="/history", tags=["History"])
 

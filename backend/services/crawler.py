@@ -375,20 +375,54 @@ class CrawlService:
                 parsed_base = urlparse(page_url)
                 product_url = f"{parsed_base.scheme}://{parsed_base.netloc}/dp/{asin}"
 
+            price = self._parse_price(p.get("price", ""))
+            original_price = self._parse_price(p.get("original_price") or p.get("mrp") or p.get("list_price"))
+            discount = p.get("discount_percent")
+            if discount is not None:
+                try:
+                    discount = float(discount)
+                except ValueError:
+                    discount = 0.0
+            elif original_price and price and original_price > price:
+                discount = round(((original_price - price) / original_price) * 100, 1)
+            else:
+                discount = 0.0
+
+            reviews_str = self._clean_text(p.get("reviews", ""))
             product = {
                 "title": title,
-                "price": self._parse_price(p.get("price", "")),
+                "product_name": title,
+                "price": price,
+                "original_price": original_price,
+                "discount_percent": discount,
                 "rating": self._parse_rating(p.get("rating", "")),
-                "reviews": self._clean_text(p.get("reviews", "")),
-                "brand": self._clean_text(p.get("brand", "")),
+                "reviews": reviews_str,
+                "reviews_count": self._parse_int(reviews_str),
+                "review_count": self._parse_int(reviews_str),
+                "brand": self._clean_text(p.get("brand", "")) or "Unknown",
                 "url": product_url or page_url,
+                "product_url": product_url or page_url,
+                "link": product_url or page_url,
                 "image_url": p.get("image", p.get("image_url", "")),
+                "image": p.get("image", p.get("image_url", "")),
                 "asin": asin,
+                "asin_sku": asin,
+                "availability": p.get("availability") or "In Stock",
+                "shipping": p.get("shipping") or ("Prime" if "amazon" in domain else "Standard"),
+                "prime_shipping": p.get("shipping") or ("Prime" if "amazon" in domain else "Standard"),
+                "position": len(normalized) + 1,
             }
 
             normalized.append(product)
 
         return normalized
+
+    def _parse_int(self, val) -> int:
+        """Extract integer count from string like '1,240 ratings'."""
+        if not val:
+            return 0
+        cleaned = re.sub(r'[^\d]', '', str(val))
+        return int(cleaned) if cleaned else 0
 
     def _parse_price(self, price_str) -> Optional[float]:
         """Extract numeric price from string like '₹2,140' or '$29.99'."""

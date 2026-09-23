@@ -28,6 +28,7 @@ class AnalyzeResponse(BaseModel):
     status: str = "completed"
     summary: str = ""
     overview: dict = {}
+    products_intelligence: dict = {}
     analytics: dict = {}
     seo: dict = {}
     products: list = []
@@ -85,15 +86,43 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
                 "reason": str(ov_err),
             }
 
-        # Step 3: Compute analytics
+        # Step 3: Product Intelligence Engine (Module 2)
+        product_intelligence = {}
+        try:
+            from services.product import product_service
+            normalized_products = product_service.normalize(
+                raw_products=crawl_result.get("products", []),
+                domain=crawl_result.get("domain", ""),
+                page_url=url,
+                html=crawl_result.get("html", "")
+            )
+            crawl_result["products"] = normalized_products
+            product_intelligence = product_service.analyze(crawl_result)
+        except Exception as p_err:
+            print(f"[WARN] Product intelligence extraction failed: {p_err}")
+            product_intelligence = {
+                "module": "products",
+                "status": "failed",
+                "reason": str(p_err),
+            }
+
+        # Step 4: Compute analytics
         analytics_service = AnalyticsService()
         analytics_data = analytics_service.compute(crawl_result)
+        if isinstance(product_intelligence, dict) and "analytics" in product_intelligence:
+            prod_an = product_intelligence["analytics"]
+            an_dict = analytics_data.setdefault("analytics", {})
+            an_dict["lowest_price"] = prod_an.get("lowest_price")
+            an_dict["highest_price"] = prod_an.get("highest_price")
+            an_dict["duplicate_products"] = prod_an.get("duplicate_products", 0)
+            an_dict["duplicate_asins"] = prod_an.get("duplicate_asins", 0)
+            an_dict["discount_distribution"] = prod_an.get("discount_distribution", {})
 
-        # Step 4: Generate AI summary
+        # Step 5: Generate AI summary
         summarizer = SummarizerService()
         summary = await summarizer.summarize(crawl_result, analytics_data)
 
-        # Step 5: Store in database (try, but don't fail if DB is unavailable)
+        # Step 6: Store in database (try, but don't fail if DB is unavailable)
         analysis_id = ""
         try:
             from models.database import AsyncSessionLocal, Analysis
@@ -116,7 +145,7 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
         except Exception as db_err:
             print(f"[WARN] Database storage skipped: {db_err}")
 
-        # Step 6: Build response
+        # Step 7: Build response
         from datetime import datetime, timezone
 
         return AnalyzeResponse(
@@ -127,6 +156,7 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
             status="completed",
             summary=summary,
             overview=overview_data,
+            products_intelligence=product_intelligence,
             analytics=analytics_data.get("analytics", {}),
             seo=analytics_data.get("seo", {}),
             products=crawl_result.get("products", []),
