@@ -150,9 +150,8 @@ class CrawlService:
                     return await self._crawl_http_fallback(url)
 
             if not result.success:
-                raise RuntimeError(
-                    f"Crawl failed for {url}: {result.error_message or 'Unknown error'}"
-                )
+                print(f"[WARN] Crawl4AI unsuccesful ({result.error_message}); falling back to HTTP crawler")
+                return await self._crawl_http_fallback(url)
 
             # Parse extracted content
             products = []
@@ -192,6 +191,7 @@ class CrawlService:
                 "images": self._extract_images(result),
                 "metadata": self._extract_metadata(result),
                 "raw_markdown": result.markdown[:5000] if result.markdown else "",
+                "html": result.html if result.html else "",
             }
 
     async def _crawl_http_fallback(self, url: str) -> dict:
@@ -294,6 +294,7 @@ class CrawlService:
                 "author": "",
             },
             "raw_markdown": f"# {title}\n\n{meta_desc}",
+            "html": html,
         }
 
     def _fallback_amazon_detail(self, html: str, products: list[dict], url: str) -> list[dict]:

@@ -98,10 +98,12 @@ _init_error = None
 
 try:
     from routes.analyze import router as analyze_router
+    from routes.overview import router as overview_router
     from routes.export import router as export_router
     from routes.history import router as history_router
 
     app.include_router(analyze_router, tags=["Analysis"])
+    app.include_router(overview_router, prefix="/overview", tags=["Overview"])
     app.include_router(export_router, prefix="/export", tags=["Export"])
     app.include_router(history_router, prefix="/history", tags=["History"])
 except Exception as e:

@@ -27,6 +27,7 @@ class AnalyzeResponse(BaseModel):
     title: str
     status: str = "completed"
     summary: str = ""
+    overview: dict = {}
     analytics: dict = {}
     seo: dict = {}
     products: list = []
@@ -71,15 +72,28 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
         # Step 1: Crawl the page
         crawl_result = await crawler.crawl_url(url)
 
-        # Step 2: Compute analytics
+        # Step 2: Website Overview Engine (Module 1)
+        overview_data = {}
+        try:
+            from services.overview import overview_service
+            overview_data = overview_service.analyze(crawl_result, status_code=200)
+        except Exception as ov_err:
+            print(f"[WARN] Overview extraction failed: {ov_err}")
+            overview_data = {
+                "module": "overview",
+                "status": "failed",
+                "reason": str(ov_err),
+            }
+
+        # Step 3: Compute analytics
         analytics_service = AnalyticsService()
         analytics_data = analytics_service.compute(crawl_result)
 
-        # Step 3: Generate AI summary
+        # Step 4: Generate AI summary
         summarizer = SummarizerService()
         summary = await summarizer.summarize(crawl_result, analytics_data)
 
-        # Step 4: Store in database (try, but don't fail if DB is unavailable)
+        # Step 5: Store in database (try, but don't fail if DB is unavailable)
         analysis_id = ""
         try:
             from models.database import AsyncSessionLocal, Analysis
@@ -102,7 +116,7 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
         except Exception as db_err:
             print(f"[WARN] Database storage skipped: {db_err}")
 
-        # Step 5: Build response
+        # Step 6: Build response
         from datetime import datetime, timezone
 
         return AnalyzeResponse(
@@ -112,6 +126,7 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
             title=crawl_result.get("title", body.title),
             status="completed",
             summary=summary,
+            overview=overview_data,
             analytics=analytics_data.get("analytics", {}),
             seo=analytics_data.get("seo", {}),
             products=crawl_result.get("products", []),
@@ -123,7 +138,10 @@ async def analyze_url(request: Request, body: AnalyzeRequest):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[ERROR] Analysis failed for {url}: {e}")
+        try:
+            print(f"[ERROR] Analysis failed for {url}: {e}")
+        except Exception:
+            pass
         raise HTTPException(
             status_code=500,
             detail=f"Analysis failed: {str(e)}"
