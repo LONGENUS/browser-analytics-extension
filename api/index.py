@@ -35,6 +35,14 @@ async def strip_vercel_prefix(request: Request, call_next):
         request.scope["path"] = path[len("/api/index.py"):] or "/"
     elif path.startswith("/api") and len(path) > 4:
         request.scope["path"] = path[len("/api"):] or "/"
+    if _init_error and request.scope["path"] not in ("/", "/health", "/debug"):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": f"Backend initialization failed: {_init_error.get('error')}",
+                "diagnostic": _init_error,
+            },
+        )
     return await call_next(request)
 
 

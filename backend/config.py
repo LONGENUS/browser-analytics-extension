@@ -3,9 +3,11 @@ WebIntel — Configuration Module
 Manages all environment variables and settings via Pydantic Settings.
 """
 
-from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator, field_validator
+from typing import Optional, Union, List, Any
 import os
+import json
 
 
 def _get_default_database_url() -> str:
@@ -18,6 +20,13 @@ def _get_default_database_url() -> str:
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # App
     APP_NAME: str = "WebIntel"
@@ -43,7 +52,7 @@ class Settings(BaseSettings):
     CACHE_TTL_SECONDS: int = 3600  # 1 hour
 
     # CORS — allow the Chrome extension & frontend domains
-    CORS_ORIGINS: list[str] = [
+    CORS_ORIGINS: Union[str, List[str]] = [
         "chrome-extension://*",
         "http://localhost:3000",
         "http://localhost:5173",
@@ -64,6 +73,39 @@ class Settings(BaseSettings):
     # Rate Limiting
     FREE_ANALYSES_PER_DAY: int = 50
 
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors(cls, v: Any) -> Any:
+        default_cors = [
+            "chrome-extension://*",
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://*.vercel.app",
+        ]
+        if not v:
+            return default_cors
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return default_cors
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [x.strip() for x in v.split(",") if x.strip()]
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_empty_strings(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            return {
+                k: v for k, v in values.items()
+                if not (isinstance(v, str) and not v.strip())
+            }
+        return values
+
     @property
     def async_database_url(self) -> str:
         """Ensure PostgreSQL connection string uses the asyncpg driver."""
@@ -74,11 +116,7 @@ class Settings(BaseSettings):
             return "postgresql+asyncpg://" + url[len("postgresql://"):]
         return url
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-
 
 # Singleton
 settings = Settings()
+
