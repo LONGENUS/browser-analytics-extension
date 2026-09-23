@@ -11,7 +11,7 @@ const APP_CONFIG = {
 
   ENVIRONMENTS: {
     production: {
-      API_BASE_URL: 'https://browser-analytics-extension.vercel.app',
+      API_BASE_URL: 'https://browser-analytics-extension-longenus05-3620s-projects.vercel.app',
       SUPABASE_URL: 'https://your-project.supabase.co',
       TIMEOUT_MS: 60000,
     },
