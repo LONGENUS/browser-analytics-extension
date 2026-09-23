@@ -1,0 +1,58 @@
+services:
+  # --- FastAPI Backend + Crawl4AI ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: webintel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://webintel:webintel@db:5432/webintel
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=true
+      - CRAWL_HEADLESS=true
+      - CRAWL_MAX_CONCURRENT=3
+      # Uncomment and set your API key for AI summaries:
+      # - OPENAI_API_KEY=sk-your-key-here
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # --- PostgreSQL ---
+  db:
+    image: postgres:16-alpine
+    container_name: webintel-db
+    environment:
+      POSTGRES_USER: webintel
+      POSTGRES_PASSWORD: webintel
+      POSTGRES_DB: webintel
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webintel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: webintel-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
