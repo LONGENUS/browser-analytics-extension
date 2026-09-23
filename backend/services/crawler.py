@@ -1,21 +1,31 @@
 """
-WebIntel — Crawl4AI Crawler Service
-Wraps AsyncWebCrawler with domain-specific extraction strategies.
+WebIntel — Crawl4AI & Hybrid HTTP Crawler Service
+Wraps AsyncWebCrawler with domain-specific extraction strategies,
+with graceful HTTP fallback for serverless environments (Vercel).
 """
 
 import asyncio
 import json
 import re
-from typing import Optional
+from typing import Optional, Any
 from urllib.parse import urlparse
 
-from crawl4ai import (
-    AsyncWebCrawler,
-    BrowserConfig,
-    CrawlerRunConfig,
-    CacheMode,
-    JsonCssExtractionStrategy,
-)
+try:
+    from crawl4ai import (
+        AsyncWebCrawler,
+        BrowserConfig,
+        CrawlerRunConfig,
+        CacheMode,
+        JsonCssExtractionStrategy,
+    )
+    CRAWL4AI_AVAILABLE = True
+except ImportError:
+    CRAWL4AI_AVAILABLE = False
+    AsyncWebCrawler = None
+    BrowserConfig = None
+    CrawlerRunConfig = None
+    CacheMode = None
+    JsonCssExtractionStrategy = None
 
 from config import settings
 from schemas.amazon import AMAZON_SCHEMA, AMAZON_PRODUCT_DETAIL_SCHEMA
@@ -25,30 +35,45 @@ from schemas.generic import GENERIC_SCHEMA
 
 class CrawlService:
     """
-    Manages the Crawl4AI browser lifecycle and provides
-    domain-aware crawling with structured extraction.
+    Manages the Crawl4AI browser lifecycle when available,
+    and provides a lightweight HTTP fallback in serverless environments.
     """
 
     def __init__(self):
-        self._crawler: Optional[AsyncWebCrawler] = None
+        self._crawler: Optional[Any] = None
         self._semaphore = asyncio.Semaphore(settings.CRAWL_MAX_CONCURRENT)
-        self._browser_config = BrowserConfig(
-            headless=settings.CRAWL_HEADLESS,
-            viewport_width=settings.CRAWL_VIEWPORT_WIDTH,
-            viewport_height=settings.CRAWL_VIEWPORT_HEIGHT,
-        )
+        if CRAWL4AI_AVAILABLE and BrowserConfig:
+            self._browser_config = BrowserConfig(
+                headless=settings.CRAWL_HEADLESS,
+                viewport_width=settings.CRAWL_VIEWPORT_WIDTH,
+                viewport_height=settings.CRAWL_VIEWPORT_HEIGHT,
+            )
+        else:
+            self._browser_config = None
 
     async def start(self):
-        """Initialize the browser."""
-        self._crawler = AsyncWebCrawler(config=self._browser_config)
-        await self._crawler.__aenter__()
-        print("[CRAWL] Crawl4AI browser initialized")
+        """Initialize the browser if Crawl4AI is available."""
+        if not CRAWL4AI_AVAILABLE or not AsyncWebCrawler or not self._browser_config:
+            print("[CRAWL] Crawl4AI not available; running in lightweight HTTP crawler mode")
+            self._crawler = None
+            return
+        try:
+            self._crawler = AsyncWebCrawler(config=self._browser_config)
+            await self._crawler.__aenter__()
+            print("[CRAWL] Crawl4AI browser initialized")
+        except Exception as e:
+            print(f"[CRAWL] Browser start skipped ({e}); falling back to HTTP crawler")
+            self._crawler = None
 
     async def stop(self):
         """Shut down the browser."""
         if self._crawler:
-            await self._crawler.__aexit__(None, None, None)
+            try:
+                await self._crawler.__aexit__(None, None, None)
+            except Exception:
+                pass
             print("[CRAWL] Crawl4AI browser closed")
+            self._crawler = None
 
     def _detect_domain(self, url: str) -> str:
         """Detect the domain category and page type from a URL."""
@@ -67,8 +92,10 @@ class CrawlService:
         else:
             return "generic"
 
-    def _get_extraction_strategy(self, domain: str) -> Optional[JsonCssExtractionStrategy]:
+    def _get_extraction_strategy(self, domain: str) -> Optional[Any]:
         """Return the appropriate extraction schema for the domain."""
+        if not CRAWL4AI_AVAILABLE or not JsonCssExtractionStrategy:
+            return None
         schemas = {
             "amazon": AMAZON_SCHEMA,
             "amazon_product": AMAZON_PRODUCT_DETAIL_SCHEMA,
@@ -85,23 +112,15 @@ class CrawlService:
     async def crawl_url(self, url: str) -> dict:
         """
         Crawl a URL and extract structured data.
-
-        Returns:
-            {
-                "url": str,
-                "domain": str,
-                "title": str,
-                "html_length": int,
-                "products": list[dict],
-                "links": list[str],
-                "images": list[str],
-                "metadata": dict,
-                "raw_markdown": str
-            }
+        Uses Crawl4AI if available, or falls back to fast HTTP crawling.
         """
         async with self._semaphore:
-            if not self._crawler:
+            if not self._crawler and CRAWL4AI_AVAILABLE:
                 await self.start()
+
+            # If crawler is not available (e.g. serverless Vercel or browser start skipped)
+            if not self._crawler:
+                return await self._crawl_http_fallback(url)
 
             domain = self._detect_domain(url)
             extraction_strategy = self._get_extraction_strategy(domain)
@@ -110,7 +129,7 @@ class CrawlService:
             run_config = CrawlerRunConfig(
                 cache_mode=CacheMode.BYPASS,
                 extraction_strategy=extraction_strategy,
-                wait_until="domcontentloaded",  # Don't wait for networkidle (Amazon never reaches it)
+                wait_until="domcontentloaded",  # Don't wait for networkidle
                 page_timeout=60000,  # 60 seconds
                 scan_full_page=False,  # Avoid extra scroll delays on detail pages
             )
@@ -125,7 +144,10 @@ class CrawlService:
                 except Exception:
                     pass
                 await self.start()
-                result = await self._crawler.arun(url=url, config=run_config)
+                if self._crawler:
+                    result = await self._crawler.arun(url=url, config=run_config)
+                else:
+                    return await self._crawl_http_fallback(url)
 
             if not result.success:
                 raise RuntimeError(
@@ -148,56 +170,186 @@ class CrawlService:
             products = self._normalize_products(products, domain, url)
 
             # Fallback for Amazon product detail pages if schema didn't catch fields
-            if domain == "amazon_product" and not products:
-                raw_title = (result.metadata.get("title") or "") if result.metadata else ""
-                clean_title = re.sub(r'\s*:\s*Amazon\.[a-z.]+(?::.*)?$', '', raw_title, flags=re.IGNORECASE).strip()
-                if clean_title:
-                    asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url)
-                    asin = asin_match.group(1) if asin_match else ""
-                    # Look for price in html
-                    price = None
-                    price_match = re.search(r'class="a-price-whole"[^>]*>([0-9,]+)', result.html or "")
-                    if price_match:
-                        try:
-                            price = float(price_match.group(1).replace(',', ''))
-                        except ValueError:
-                            pass
-                    products.append({
-                        "title": clean_title,
-                        "price": price,
-                        "rating": None,
-                        "reviews": "",
-                        "brand": "",
-                        "url": url,
-                        "image_url": "",
-                        "asin": asin,
-                    })
+            if domain == "amazon_product" and result.html:
+                products = self._fallback_amazon_detail(result.html, products, url)
 
-            # Extract metadata from HTML
-            metadata = self._extract_metadata(result)
+            # Extract page title
+            title = ""
+            if result.metadata and result.metadata.get("title"):
+                title = result.metadata["title"].strip()
+            elif products and products[0].get("title"):
+                title = products[0]["title"]
+            else:
+                title = urlparse(url).netloc
 
             return {
                 "url": url,
                 "domain": domain,
-                "title": (result.metadata.get("title") or "") if result.metadata else "",
-                "html_length": len(result.html or ""),
+                "title": title,
+                "html_length": len(result.html) if result.html else 0,
                 "products": products,
                 "links": self._extract_links(result),
                 "images": self._extract_images(result),
-                "metadata": metadata,
-                "raw_markdown": (result.markdown or "")[:5000],  # First 5K chars
+                "metadata": self._extract_metadata(result),
+                "raw_markdown": result.markdown[:5000] if result.markdown else "",
             }
 
-    def _normalize_products(self, products: list, domain: str, page_url: str = "") -> list:
-        """Clean and normalize extracted product data."""
-        normalized = []
+    async def _crawl_http_fallback(self, url: str) -> dict:
+        """
+        Lightweight HTTP fallback for serverless environments (Vercel) without Playwright.
+        Uses httpx and BeautifulSoup for zero-binary, low-latency extraction.
+        """
+        import httpx
+        from bs4 import BeautifulSoup
 
-        for p in products:
+        domain = self._detect_domain(url)
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+
+        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(url)
+            html = resp.text
+
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else urlparse(url).netloc
+
+        # Meta tags
+        meta_desc = ""
+        desc_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
+        if desc_tag and desc_tag.get("content"):
+            meta_desc = desc_tag["content"].strip()
+
+        # Links
+        links = []
+        for a in soup.find_all("a", href=True)[:100]:
+            href = a["href"]
+            if href.startswith("/"):
+                parsed = urlparse(url)
+                href = f"{parsed.scheme}://{parsed.netloc}{href}"
+            if href.startswith("http"):
+                links.append(href)
+
+        # Images
+        images = []
+        for img in soup.find_all("img", src=True)[:50]:
+            src = img["src"]
+            if src.startswith("http"):
+                images.append(src)
+
+        # Basic product extraction heuristic
+        raw_products = []
+        if "amazon" in domain:
+            title_tag = soup.find(id="productTitle")
+            if title_tag:
+                price_tag = soup.find("span", class_="a-price-whole")
+                raw_products.append({
+                    "title": title_tag.get_text(strip=True),
+                    "price": price_tag.get_text(strip=True) if price_tag else "",
+                    "url": url,
+                    "image": images[0] if images else "",
+                })
+            else:
+                items = soup.find_all("div", attrs={"data-component-type": "s-search-result"})[:20]
+                for item in items:
+                    h2 = item.find("h2")
+                    p_title = h2.get_text(strip=True) if h2 else ""
+                    p_price = ""
+                    price_el = item.find("span", class_="a-price-whole")
+                    if price_el:
+                        p_price = price_el.get_text(strip=True)
+                    if p_title:
+                        raw_products.append({"title": p_title, "price": p_price, "url": url})
+        elif "flipkart" in domain:
+            for item in soup.find_all("div", class_="_1AtVbE")[:15]:
+                title_el = item.find("div", class_="_4rR01T") or item.find("a", class_="s1Q9rs")
+                price_el = item.find("div", class_="_30jeq3")
+                if title_el:
+                    raw_products.append({
+                        "title": title_el.get_text(strip=True),
+                        "price": price_el.get_text(strip=True) if price_el else "",
+                        "url": url,
+                    })
+
+        products = self._normalize_products(raw_products, domain, url)
+
+        return {
+            "url": url,
+            "domain": domain,
+            "title": title,
+            "html_length": len(html),
+            "products": products,
+            "links": links,
+            "images": images,
+            "metadata": {
+                "title": title,
+                "description": meta_desc,
+                "keywords": "",
+                "author": "",
+            },
+            "raw_markdown": f"# {title}\n\n{meta_desc}",
+        }
+
+    def _fallback_amazon_detail(self, html: str, products: list[dict], url: str) -> list[dict]:
+        """Regex fallback to extract price, title, rating from Amazon detail page HTML."""
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+
+        product = products[0] if products else {
+            "title": None, "price": None, "rating": None,
+            "reviews": None, "brand": None, "url": url,
+            "image_url": None, "asin": None,
+        }
+
+        # Title
+        if not product.get("title"):
+            title_el = soup.find(id="productTitle")
+            if title_el:
+                product["title"] = self._clean_text(title_el.get_text())
+
+        # Price
+        if not product.get("price"):
+            price_el = soup.find("span", class_="a-price-whole")
+            if price_el:
+                product["price"] = self._parse_price(price_el.get_text())
+
+        # Rating
+        if not product.get("rating"):
+            rating_el = soup.find("span", class_="a-icon-alt")
+            if rating_el:
+                product["rating"] = self._parse_rating(rating_el.get_text())
+
+        # Brand
+        if not product.get("brand"):
+            brand_el = soup.find(id="bylineInfo")
+            if brand_el:
+                product["brand"] = self._clean_text(
+                    re.sub(r'^(?:Brand:|Visit the)\s*', '', brand_el.get_text())
+                )
+
+        # ASIN from URL
+        if not product.get("asin"):
+            asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url)
+            if asin_match:
+                product["asin"] = asin_match.group(1)
+
+        product["url"] = url
+        return [product]
+
+    def _normalize_products(self, raw_products: list, domain: str, page_url: str = "") -> list[dict]:
+        """Normalize raw extracted products into consistent format."""
+        normalized = []
+        for p in raw_products:
             if not isinstance(p, dict):
                 continue
 
             title = self._clean_text(p.get("title", ""))
-            # Require minimum title length to eliminate empty container matches
             if not title or len(title) < 2:
                 continue
 
@@ -244,9 +396,7 @@ class CrawlService:
         if not price_str:
             return None
 
-        # Remove currency symbols and commas
         cleaned = re.sub(r'[₹$€£¥,\s]', '', str(price_str))
-        # Extract the first number
         match = re.search(r'(\d+\.?\d*)', cleaned)
         if match:
             try:
@@ -280,7 +430,7 @@ class CrawlService:
     def _extract_metadata(self, result) -> dict:
         """Extract page metadata from crawl result."""
         metadata = {}
-        if result.metadata:
+        if hasattr(result, "metadata") and result.metadata:
             metadata = {
                 "title": (result.metadata.get("title") or "").strip(),
                 "description": (result.metadata.get("description") or "").strip(),
@@ -292,7 +442,7 @@ class CrawlService:
     def _extract_links(self, result) -> list:
         """Extract links from crawl result."""
         links = []
-        if result.links:
+        if hasattr(result, "links") and result.links:
             if isinstance(result.links, dict):
                 for link_type, link_list in result.links.items():
                     if isinstance(link_list, list):
@@ -312,7 +462,7 @@ class CrawlService:
     def _extract_images(self, result) -> list:
         """Extract image URLs from crawl result."""
         images = []
-        if result.media and isinstance(result.media, dict):
+        if hasattr(result, "media") and result.media and isinstance(result.media, dict):
             img_list = result.media.get("images", [])
             for img in img_list[:50]:
                 if isinstance(img, dict):

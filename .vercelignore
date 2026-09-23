@@ -1,0 +1,26 @@
+# Files to ignore in Vercel serverless deployment
+.git
+.github
+.env
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Extension assets (extension runs in browser, not on Vercel)
+extension/
+assets/
+
+# Local databases and caches
+backend/webintel.db
+backend/webintel.db-journal
+*.db
+*.sqlite3
+
+# Documentation & orchestration
+docs/
+docker-compose.yml
+backend/Dockerfile
