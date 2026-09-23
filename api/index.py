@@ -27,6 +27,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Route Normalization Middleware for Vercel Serverless
+@app.middleware("http")
+async def strip_vercel_prefix(request: Request, call_next):
+    path = request.scope.get("path", "")
+    if path.startswith("/api/index.py"):
+        request.scope["path"] = path[len("/api/index.py"):] or "/"
+    elif path.startswith("/api") and len(path) > 4:
+        request.scope["path"] = path[len("/api"):] or "/"
+    return await call_next(request)
+
+
 # Path resolution for backend modules
 cwd = os.getcwd()
 backend_dir = os.path.join(cwd, "backend")
