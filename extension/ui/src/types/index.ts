@@ -27,6 +27,7 @@ export interface OverviewData {
   favicon?: string;
   industry?: string;
   pageType?: string;
+  platform?: string;
   confidence?: number;
   language?: string;
   currency?: string;
@@ -43,6 +44,9 @@ export interface SeoMetadata {
   canonical: string;
   robots: string;
   viewport?: string;
+  charset?: string;
+  keywords?: string;
+  author?: string;
 }
 
 export interface HeadingItem {
@@ -88,9 +92,13 @@ export interface SeoIntelligence {
   headings: HeadingsAudit;
   images: ImagesAudit;
   links: LinksAudit;
+  open_graph?: Record<string, string>;
+  twitter_cards?: Record<string, string>;
   structured_data?: {
     has_json_ld: boolean;
     detected_types: string[];
+    count?: number;
+    items?: Array<{ schema_type: string; context: string; name?: string | null }>;
   };
 }
 
