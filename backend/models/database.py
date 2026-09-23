@@ -133,9 +133,12 @@ class Product(Base):
 # --- Database Init ---
 async def init_db():
     """Create all tables if they don't exist."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("[OK] Database tables initialized")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[OK] Database tables initialized")
+    except Exception as e:
+        print(f"[WARN] Database initialization deferred: {e}")
 
 
 # --- Dependency ---

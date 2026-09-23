@@ -8,6 +8,14 @@ from typing import Optional
 import os
 
 
+def _get_default_database_url() -> str:
+    # If running in serverless environment (Vercel / Lambda) without custom DATABASE_URL,
+    # use /tmp which is the only writable directory.
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return "sqlite+aiosqlite:////tmp/webintel.db"
+    return f"sqlite+aiosqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webintel.db')}"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -22,7 +30,7 @@ class Settings(BaseSettings):
     API_BASE_URL: str = "http://localhost:8000"
 
     # Database (SQLite for local dev, PostgreSQL for production)
-    DATABASE_URL: str = f"sqlite+aiosqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webintel.db')}"
+    DATABASE_URL: str = _get_default_database_url()
 
     # Supabase credentials (optional for SQLite, active in production)
     SUPABASE_URL: Optional[str] = None
