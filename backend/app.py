@@ -26,23 +26,26 @@ from routes.history import router as history_router
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Initializes Crawl4AI crawler and database connections on startup,
-    and cleans them up on shutdown.
+    Initializes crawler and database connections on startup with resilient fallbacks.
     """
     # --- Startup ---
     from services.crawler import CrawlService
     from models.database import init_db
 
     # Initialize database tables
-    await init_db()
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"[WARN] Database startup warning: {e}")
 
     # Initialize the global crawler instance
-    crawler_service = CrawlService()
     try:
+        crawler_service = CrawlService()
         await crawler_service.start()
+        app.state.crawler = crawler_service
     except Exception as e:
         print(f"[WARN] Crawler initial startup warning: {e}")
-    app.state.crawler = crawler_service
+        app.state.crawler = None
 
     print(f"[OK] {settings.APP_NAME} v{settings.APP_VERSION} started")
     print(f"[API] API running on http://{settings.HOST}:{settings.PORT}")
@@ -51,7 +54,10 @@ async def lifespan(app: FastAPI):
 
     # --- Shutdown ---
     if hasattr(app.state, "crawler") and app.state.crawler:
-        await app.state.crawler.stop()
+        try:
+            await app.state.crawler.stop()
+        except Exception:
+            pass
     print(f"[STOP] {settings.APP_NAME} shut down")
 
 
@@ -88,7 +94,18 @@ app.include_router(export_router, prefix="/export", tags=["Export"])
 app.include_router(history_router, prefix="/history", tags=["History"])
 
 
-# --- Health Check ---
+# --- Root & Health Check ---
+@app.get("/")
+async def root():
+    """Root endpoint for status check."""
+    return {
+        "status": "healthy",
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 async def health_check():
     """Basic health check endpoint."""

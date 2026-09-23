@@ -1,9 +1,12 @@
-import sys
 import os
+import sys
 
-# Add backend directory to sys.path so all internal modules (routes, services, models) resolve cleanly
-backend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend")
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
+# Ensure both root directory and backend directory are in sys.path
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.join(root_dir, "backend")
+
+for p in (backend_dir, root_dir):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from app import app
