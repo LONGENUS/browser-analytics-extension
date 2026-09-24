@@ -377,6 +377,15 @@ export async function analyzeWebsite(
 
     if (resp.ok) {
       const data: FullDossier = await resp.json();
+      const realDomain = extractDomain(cleanUrl);
+      if (!data.domain || data.domain === 'generic') {
+        data.domain = realDomain;
+      }
+      if (data.overview) {
+        if (!data.overview.domain || data.overview.domain === 'generic') {
+          data.overview.domain = realDomain;
+        }
+      }
 
       // If backend returned 0 products but live tab extracted products, merge them!
       if (liveTabData && liveTabData.products && liveTabData.products.length > (data.products?.length || 0)) {

@@ -141,6 +141,7 @@ export interface BrowserTrafficData {
   topCountries: CountryTraffic[];
   trafficChannels: TrafficChannel[];
   topReferrers: Referrer[];
+  globalRank?: number | null;
 
   source: "browser-traffic";
   lastUpdated: string;
