@@ -116,9 +116,43 @@ export interface TechStackData {
   technologies: TechItem[];
 }
 
+export interface CountryTraffic {
+  country: string;
+  share: number;
+  visits?: number;
+}
+
+export interface TrafficChannel {
+  channel: string;
+  share: number;
+}
+
+export interface Referrer {
+  referrer: string;
+  visits: number;
+}
+
+export interface BrowserTrafficData {
+  monthlyVisits: number | null;
+  avgVisitDuration: number | null;
+  pagesPerVisit: number | null;
+  bounceRate: number | null;
+
+  topCountries: CountryTraffic[];
+  trafficChannels: TrafficChannel[];
+  topReferrers: Referrer[];
+
+  source: "browser-traffic";
+  lastUpdated: string;
+}
+
+export interface BrowserTrafficProvider {
+  getTraffic(domain: string): Promise<BrowserTrafficData | null>;
+}
+
 export interface TrafficMetrics {
   monthlyVisits: number | null;
-  avgVisitDuration: string | null;
+  avgVisitDuration: string | number | null;
   pagesPerVisit: number | null;
   bounceRate: number | null;
 }
@@ -127,14 +161,16 @@ export interface CountryShare {
   country: string;
   code?: string;
   share: number;
+  visits?: number;
 }
 
 export interface TrafficChannels {
-  direct: number;
-  search: number;
-  social: number;
-  referral: number;
-  mail: number;
+  direct?: number;
+  search?: number;
+  social?: number;
+  referral?: number;
+  mail?: number;
+  [key: string]: number | undefined;
 }
 
 export interface TrafficData {
@@ -142,8 +178,10 @@ export interface TrafficData {
   status: string;
   metrics: TrafficMetrics;
   topCountries?: CountryShare[];
-  trafficChannels?: TrafficChannels;
-  topReferrers?: string[];
+  trafficChannels?: TrafficChannels | TrafficChannel[];
+  channels?: TrafficChannels;
+  topReferrers?: Referrer[] | string[];
+  lastUpdated?: string;
 }
 
 export interface ProductAnalytics {

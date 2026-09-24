@@ -184,7 +184,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                Traffic Snapshot
+                Browser Traffic
               </span>
               <button
                 onClick={() => onNavigateTab('analytics')}

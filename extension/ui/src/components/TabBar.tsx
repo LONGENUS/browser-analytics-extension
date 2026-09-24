@@ -15,7 +15,7 @@ export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange, productC
     { key: 'products', label: 'Products', badge: productCount },
     { key: 'seo', label: 'SEO' },
     { key: 'tech', label: 'Tech Stack' },
-    { key: 'analytics', label: 'Analytics' },
+    { key: 'analytics', label: 'Browser Traffic' },
     { key: 'insights', label: 'AI Insights' },
   ];
 

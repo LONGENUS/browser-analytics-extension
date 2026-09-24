@@ -280,7 +280,7 @@ function buildDossierFromLiveData(liveData: any): FullDossier {
       technologies: liveData.technologies || [],
     },
     traffic: {
-      source: 'Unavailable (Coming soon)',
+      source: 'Browser Traffic',
       status: 'unmetered',
       metrics: {
         monthlyVisits: null,

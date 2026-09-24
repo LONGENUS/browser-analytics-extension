@@ -10,6 +10,7 @@ import { TechStackTab } from './components/tabs/TechStackTab';
 import { AnalyticsTab } from './components/tabs/AnalyticsTab';
 import { AiInsightsTab } from './components/tabs/AiInsightsTab';
 import { getActiveTab, analyzeWebsite, ActiveTabInfo } from './services/api';
+import { browserTrafficService } from './services/browserTraffic';
 import { FullDossier } from './types';
 
 declare const chrome: any;
@@ -120,6 +121,9 @@ export const App: React.FC = () => {
       const tab = await getActiveTab();
       if (tab && tab.isValidHttp) {
         setCurrentTab(tab);
+        if (tab.domain) {
+          browserTrafficService.invalidate(tab.domain);
+        }
         executeAnalysis(tab.url, tab.title, true);
       }
     }, 200);
@@ -309,7 +313,9 @@ export const App: React.FC = () => {
 
                 {activeTab === 'tech' && <TechStackTab dossier={dossier} />}
 
-                {activeTab === 'analytics' && <AnalyticsTab dossier={dossier} />}
+                {activeTab === 'analytics' && (
+                  <AnalyticsTab dossier={dossier} isAnalyzing={isLoading} />
+                )}
 
                 {activeTab === 'insights' && <AiInsightsTab dossier={dossier} />}
               </motion.div>
