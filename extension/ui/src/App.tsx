@@ -9,8 +9,10 @@ import { SeoTab } from './components/tabs/SeoTab';
 import { TechStackTab } from './components/tabs/TechStackTab';
 import { AnalyticsTab } from './components/tabs/AnalyticsTab';
 import { AiInsightsTab } from './components/tabs/AiInsightsTab';
+import { AuthModal, AuthModalView } from './components/auth/AuthModal';
 import { getActiveTab, analyzeWebsite, ActiveTabInfo } from './services/api';
 import { browserTrafficService } from './services/browserTraffic';
+import { authService, sessionManager, AuthState, AuthUser } from './services/auth';
 import { FullDossier } from './types';
 
 declare const chrome: any;
@@ -25,6 +27,13 @@ export const App: React.FC = () => {
     }
     return false;
   });
+
+  // Authentication State
+  const [authState, setAuthState] = useState<AuthState>(sessionManager.getState());
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(sessionManager.getUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalView, setAuthModalView] = useState<AuthModalView>('login');
+  const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
 
   // Active Tab navigation
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -54,6 +63,22 @@ export const App: React.FC = () => {
       localStorage.setItem('webintel_theme', 'light');
     }
   }, [isDark]);
+
+  // Restore auth session silently on startup & subscribe to changes
+  useEffect(() => {
+    authService.restoreSession();
+    const unsubscribe = sessionManager.subscribe((state, session) => {
+      setAuthState(state);
+      setCurrentUser(session?.user || null);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleOpenAuth = (view: AuthModalView = 'login', prompt?: string) => {
+    setAuthModalView(view);
+    setAuthPromptMessage(prompt || null);
+    setIsAuthModalOpen(true);
+  };
 
   /**
    * Executes a single analysis with concurrency lock and cancellation of any in-flight request.
@@ -89,6 +114,11 @@ export const App: React.FC = () => {
         if (isMountedRef.current && abortControllerRef.current === controller) {
           setDossier(data);
           setError(null);
+
+          // If user is authenticated, sync completed analysis to cloud
+          if (sessionManager.isAuthenticated()) {
+            authService.saveAnalysisToCloud(data).catch(() => {});
+          }
         }
       } catch (err: any) {
         if (err.name === 'AbortError' || err.message === 'Analysis was cancelled') {
@@ -201,7 +231,26 @@ export const App: React.FC = () => {
           isDark={isDark}
           onToggleTheme={handleToggleTheme}
           onClose={handleClose}
+          authState={authState}
+          currentUser={currentUser}
+          onOpenAuth={handleOpenAuth}
         />
+
+        {/* Session Expired Prompt (preserves current analysis in memory) */}
+        {authState === 'session_expired' && (
+          <div className="bg-amber-50 dark:bg-amber-950/70 border-b border-amber-200 dark:border-amber-800 px-3.5 py-2 flex items-center justify-between text-xs text-amber-800 dark:text-amber-200 shrink-0">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Session expired. Sign in to resume cloud sync.</span>
+            </span>
+            <button
+              onClick={() => handleOpenAuth('login', 'Please sign in to keep cloud sync active.')}
+              className="px-2.5 py-0.5 rounded-lg text-[11px] font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors shrink-0"
+            >
+              Sign In
+            </button>
+          </div>
+        )}
 
         {/* Subtle top loading progress bar (non-blinking) */}
         {isLoading && (
@@ -322,6 +371,14 @@ export const App: React.FC = () => {
             </AnimatePresence>
           )}
         </main>
+
+        {/* Unified Authentication Modal */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          initialView={authModalView}
+          promptMessage={authPromptMessage}
+        />
       </div>
     </div>
   );
