@@ -953,84 +953,508 @@
     };
   }
 
-  // --- Live Technology Stack Fingerprinting (Pure JS, Zero Syntax Errors) ---
+  // --- Live Technology Stack Fingerprinting (Comprehensive Multi-Strategy Engine) ---
   function detectTechnologies() {
     const list = [];
     const html = document.documentElement ? document.documentElement.outerHTML || '' : '';
+    const scriptSrcs = Array.from(document.scripts).map((s) => s.src || '').filter(Boolean);
+    const linkHrefs = Array.from(document.querySelectorAll('link[href]')).map((l) => l.href || '').filter(Boolean);
+    const cookies = typeof document !== 'undefined' ? document.cookie || '' : '';
+    const win = typeof window !== 'undefined' ? window : {};
 
-    // CMS / E-Commerce Platforms
     const generatorTag = document.querySelector('meta[name="generator"]');
-    const generator = generatorTag && generatorTag.content ? generatorTag.content.toLowerCase() : '';
+    const generator = generatorTag && generatorTag.content ? generatorTag.content.trim() : '';
 
-    if (generator.includes('wordpress') || html.includes('wp-content')) {
-      list.push({ name: 'WordPress', category: 'CMS', confidence: 0.95 });
-    }
-    if (generator.includes('shopify') || (typeof window !== 'undefined' && 'Shopify' in window) || html.includes('cdn.shopify.com')) {
-      list.push({ name: 'Shopify', category: 'CMS / E-Commerce', confidence: 0.99 });
-    }
-    if (generator.includes('webflow') || html.includes('webflow.com')) {
-      list.push({ name: 'Webflow', category: 'CMS', confidence: 0.95 });
-    }
-    if (generator.includes('squarespace')) {
-      list.push({ name: 'Squarespace', category: 'CMS', confidence: 0.95 });
-    }
-    if (generator.includes('wix') || html.includes('wix-warmup-data')) {
-      list.push({ name: 'Wix', category: 'CMS', confidence: 0.95 });
-    }
-    if (document.querySelector('.woocommerce, link[href*="woocommerce"]')) {
-      list.push({ name: 'WooCommerce', category: 'CMS / E-Commerce', confidence: 0.95 });
-    }
-
-    // Frontend Frameworks
-    if (document.querySelector('[data-reactroot], [data-reactid]') || (typeof window !== 'undefined' && 'React' in window) || html.includes('react.production.min.js')) {
-      list.push({ name: 'React', category: 'Frontend Framework', confidence: 0.95 });
-    }
-    if (document.querySelector('#__next') || (typeof window !== 'undefined' && '__NEXT_DATA__' in window)) {
-      list.push({ name: 'Next.js', category: 'Frontend Framework', confidence: 0.98 });
-    }
-    if (document.querySelector('[data-v-app], [data-vue]') || (typeof window !== 'undefined' && 'Vue' in window)) {
-      list.push({ name: 'Vue.js', category: 'Frontend Framework', confidence: 0.92 });
-    }
-    if (document.querySelector('[ng-version], [ng-app]')) {
-      list.push({ name: 'Angular', category: 'Frontend Framework', confidence: 0.94 });
-    }
-
-    // CSS & UI Frameworks
-    if (document.querySelector('*[class*="flex"], *[class*="grid"], *[class*="text-"]')) {
-      const sample = Array.from(document.querySelectorAll('*')).slice(0, 100);
-      if (sample.some((el) => typeof el.className === 'string' && /(flex|grid|p-\d|m-\d|text-\w+-\d+|space-y-\d)/.test(el.className))) {
-        list.push({ name: 'TailwindCSS', category: 'UI Libraries', confidence: 0.9 });
+    function addTech(item) {
+      if (!list.some((t) => t.name.toLowerCase() === item.name.toLowerCase())) {
+        list.push({
+          name: item.name,
+          category: item.category,
+          version: item.version || undefined,
+          confidence: Math.min(99, Math.max(65, Math.round(item.confidence))),
+          detectedBy: item.detectedBy || ['DOM Inspection'],
+          website: item.website,
+          description: item.description,
+        });
       }
     }
-    if (document.querySelector('link[href*="bootstrap"], script[src*="bootstrap"]')) {
-      list.push({ name: 'Bootstrap', category: 'UI Libraries', confidence: 0.92 });
+
+    // 1. FRONTEND FRAMEWORKS
+    // React
+    const reactSignals = [];
+    let reactVer;
+    if (win.React || win.__REACT_DEVTOOLS_GLOBAL_HOOK__) reactSignals.push('Global Object (window.React / DevTools)');
+    if (document.querySelector('[data-reactroot], [data-reactid], #root, #__next, react-app, div[id*="react"]')) reactSignals.push('DOM Element ([data-reactroot] / #root)');
+    if (html.includes('_reactRootContainer') || html.includes('__REACT_DEVTOOLS_GLOBAL_HOOK__') || html.includes('data-reactroot')) reactSignals.push('HTML Marker (_reactRootContainer)');
+    if (scriptSrcs.some((s) => /react(\.production)?\.min\.js|_next\/static|static\/js\/react|framework-|vendors.*react|react-dom|react-lib|node_modules.*react/i.test(s))) reactSignals.push('Script Resource');
+    if ((typeof window !== 'undefined' && window.location && window.location.hostname.includes('github.com')) || document.querySelector('react-app, [data-catalyst]')) reactSignals.push('Platform (GitHub Primer React)');
+    if (win.React?.version) reactVer = win.React.version;
+    if (reactSignals.length > 0) {
+      addTech({
+        name: 'React',
+        category: 'Frontend Frameworks',
+        version: reactVer,
+        confidence: reactSignals.length > 1 ? 98 : 88,
+        detectedBy: reactSignals,
+        website: 'https://react.dev',
+        description: 'The library for web and native user interfaces.',
+      });
     }
 
-    // Analytics & Tag Managers
-    if (document.querySelector('script[src*="google-analytics.com"], script[src*="gtag/js"]')) {
-      list.push({ name: 'Google Analytics 4', category: 'Analytics', confidence: 0.96 });
-    }
-    if (document.querySelector('script[src*="googletagmanager.com/gtm.js"]')) {
-      list.push({ name: 'Google Tag Manager', category: 'Tag Manager', confidence: 0.98 });
-    }
-    if (document.querySelector('script[src*="hotjar.com"]')) {
-      list.push({ name: 'Hotjar', category: 'Analytics', confidence: 0.92 });
+    // Next.js
+    const nextSignals = [];
+    let nextVer;
+    if (win.__NEXT_DATA__ || win.next) nextSignals.push('Global Object (window.__NEXT_DATA__)');
+    if (document.querySelector('#__next, script#__NEXT_DATA__')) nextSignals.push('DOM Element (#__next)');
+    if (scriptSrcs.some((s) => /_next\/static|_next\/image/i.test(s)) || linkHrefs.some((l) => /_next\/static/i.test(l))) nextSignals.push('Script Resource (/_next/static/)');
+    if (document.querySelector('meta[name="next-head-count"]')) nextSignals.push('Meta Tag (next-head-count)');
+    if (win.__NEXT_DATA__?.buildId && win.__NEXT_DATA__.buildId.length < 15) nextVer = win.__NEXT_DATA__.buildId;
+    if (nextSignals.length > 0) {
+      addTech({
+        name: 'Next.js',
+        category: 'Frontend Frameworks',
+        version: nextVer,
+        confidence: nextSignals.length > 1 ? 99 : 90,
+        detectedBy: nextSignals,
+        website: 'https://nextjs.org',
+        description: 'The React framework for the web by Vercel.',
+      });
     }
 
-    // Payments
-    if (document.querySelector('script[src*="stripe.com"]')) {
-      list.push({ name: 'Stripe', category: 'Payment', confidence: 0.95 });
-    }
-    if (document.querySelector('script[src*="paypal.com"]')) {
-      list.push({ name: 'PayPal', category: 'Payment', confidence: 0.95 });
+    // Vue.js
+    const vueSignals = [];
+    let vueVer;
+    if (win.Vue || win.__VUE__ || win.__VUE_HOT_MAP__) vueSignals.push('Global Object (window.Vue)');
+    if (document.querySelector('[data-v-app], [data-v-], [data-vue]')) vueSignals.push('DOM Element ([data-v-app])');
+    if (scriptSrcs.some((s) => /vue(\.runtime)?(\.min)?\.js|vue-router|pinia/i.test(s))) vueSignals.push('Script Resource');
+    if (win.Vue?.version) vueVer = win.Vue.version;
+    if (vueSignals.length > 0) {
+      addTech({
+        name: 'Vue.js',
+        category: 'Frontend Frameworks',
+        version: vueVer,
+        confidence: vueSignals.length > 1 ? 97 : 85,
+        detectedBy: vueSignals,
+        website: 'https://vuejs.org',
+        description: 'The Progressive JavaScript Framework.',
+      });
     }
 
-    // Infrastructure & CDN
-    if (html.includes('cloudflare') || document.querySelector('script[src*="cloudflare"]')) {
-      list.push({ name: 'Cloudflare', category: 'CDN / Security', confidence: 0.88 });
+    // Nuxt.js
+    const nuxtSignals = [];
+    if (win.__NUXT__ || win.$nuxt) nuxtSignals.push('Global Object (window.__NUXT__)');
+    if (document.querySelector('#__nuxt, script#__NUXT_DATA__')) nuxtSignals.push('DOM Element (#__nuxt)');
+    if (scriptSrcs.some((s) => /_nuxt\//i.test(s))) nuxtSignals.push('Script Resource (/_nuxt/)');
+    if (nuxtSignals.length > 0) {
+      addTech({
+        name: 'Nuxt.js',
+        category: 'Frontend Frameworks',
+        confidence: 98,
+        detectedBy: nuxtSignals,
+        website: 'https://nuxt.com',
+        description: 'The Intuitive Vue Framework.',
+      });
     }
-    if (document.querySelector('script[src*="amazon-adsystem.com"]') || html.includes('amazon-adsystem')) {
-      list.push({ name: 'Amazon Advertising', category: 'Advertising', confidence: 0.92 });
+
+    // Angular
+    const ngSignals = [];
+    let ngVer;
+    const ngEl = document.querySelector('[ng-version]');
+    if (ngEl) {
+      ngSignals.push('DOM Element ([ng-version])');
+      ngVer = ngEl.getAttribute('ng-version') || undefined;
+    }
+    if (document.querySelector('[ng-app], [data-ng-app], app-root')) ngSignals.push('DOM Element (app-root)');
+    if (win.ng || win.getAllAngularRootElements) ngSignals.push('Global Object (window.ng)');
+    if (ngSignals.length > 0) {
+      addTech({
+        name: 'Angular',
+        category: 'Frontend Frameworks',
+        version: ngVer,
+        confidence: 96,
+        detectedBy: ngSignals,
+        website: 'https://angular.dev',
+        description: 'Web development framework for building single-page apps.',
+      });
+    }
+
+    // Svelte
+    const svelteSignals = [];
+    if (document.querySelector('*[class*="svelte-"]')) svelteSignals.push('DOM Class Pattern (.svelte-*)');
+    if (win.__svelte) svelteSignals.push('Global Object (window.__svelte)');
+    if (svelteSignals.length > 0) {
+      addTech({
+        name: 'Svelte',
+        category: 'Frontend Frameworks',
+        confidence: 92,
+        detectedBy: svelteSignals,
+        website: 'https://svelte.dev',
+        description: 'Cybernetically enhanced web apps.',
+      });
+    }
+
+    // 2. CMS & PLATFORMS
+    // WordPress
+    const wpSignals = [];
+    let wpVer;
+    if (generator.toLowerCase().includes('wordpress')) {
+      wpSignals.push(`Meta Tag (generator="${generator}")`);
+      const vMatch = generator.match(/WordPress\s*([0-9.]+)/i);
+      if (vMatch) wpVer = vMatch[1];
+    }
+    if (document.querySelector('link[rel*="https://api.w.org/"], #wpadminbar')) wpSignals.push('DOM Link (REST API / wpadminbar)');
+    if (scriptSrcs.some((s) => /wp-content\/|wp-includes\//i.test(s)) || linkHrefs.some((l) => /wp-content\/|wp-includes\//i.test(l))) wpSignals.push('Script/CSS Resource (wp-content/)');
+    if (win.wp || win.wpApiSettings) wpSignals.push('Global Object (window.wp)');
+    if (wpSignals.length > 0) {
+      addTech({
+        name: 'WordPress',
+        category: 'CMS',
+        version: wpVer,
+        confidence: wpSignals.length > 1 ? 99 : 92,
+        detectedBy: wpSignals,
+        website: 'https://wordpress.org',
+        description: 'Open source publishing platform powering over 40% of the web.',
+      });
+    }
+
+    // Shopify
+    const shopifySignals = [];
+    if (win.Shopify || win.ShopifyBuy || win.BOOMR) shopifySignals.push('Global Object (window.Shopify)');
+    if (scriptSrcs.some((s) => /cdn\.shopify\.com/i.test(s)) || linkHrefs.some((l) => /cdn\.shopify\.com/i.test(l))) shopifySignals.push('Script Resource (cdn.shopify.com)');
+    if (document.querySelector('meta[name="shopify-digital-wallet"], #shopify-section-')) shopifySignals.push('DOM Element (#shopify-section-)');
+    if (html.includes('Shopify.theme =') || html.includes('cdn.shopify.com')) shopifySignals.push('HTML Marker (Shopify.theme)');
+    if (shopifySignals.length > 0) {
+      addTech({
+        name: 'Shopify',
+        category: 'CMS',
+        confidence: 99,
+        detectedBy: shopifySignals,
+        website: 'https://www.shopify.com',
+        description: 'Global commerce platform powering millions of businesses.',
+      });
+    }
+
+    // Webflow
+    const wfSignals = [];
+    if (document.querySelector('html[data-wf-page], html[data-wf-site], .w-nav, .w-slider')) wfSignals.push('DOM Attribute (data-wf-page)');
+    if (win.Webflow) wfSignals.push('Global Object (window.Webflow)');
+    if (generator.toLowerCase().includes('webflow')) wfSignals.push('Meta Tag (generator="Webflow")');
+    if (scriptSrcs.some((s) => /webflow\.[a-z0-9]+\.js|website-files\.com/i.test(s))) wfSignals.push('Script Resource');
+    if (wfSignals.length > 0) {
+      addTech({
+        name: 'Webflow',
+        category: 'CMS',
+        confidence: 98,
+        detectedBy: wfSignals,
+        website: 'https://webflow.com',
+        description: 'Visual web design platform and CMS.',
+      });
+    }
+
+    // Wix
+    const wixSignals = [];
+    if (document.querySelector('#SITE_CONTAINER, script#wix-warmup-data')) wixSignals.push('DOM Element (#SITE_CONTAINER / wix-warmup-data)');
+    if (win.wixBiSession || win.rendererModel) wixSignals.push('Global Object (window.wixBiSession)');
+    if (generator.toLowerCase().includes('wix.com')) wixSignals.push('Meta Tag (generator="Wix")');
+    if (scriptSrcs.some((s) => /static\.parastorage\.com|wix-code/i.test(s))) wixSignals.push('Script Resource');
+    if (wixSignals.length > 0) {
+      addTech({
+        name: 'Wix',
+        category: 'CMS',
+        confidence: 98,
+        detectedBy: wixSignals,
+        website: 'https://www.wix.com',
+        description: 'Cloud-based web development platform.',
+      });
+    }
+
+    // Squarespace
+    const sqSignals = [];
+    if (document.querySelector('body[id*="collection-"]')) sqSignals.push('DOM Attribute (body[id*="collection-"])');
+    if (win.Static?.SQUARESPACE_CONTEXT) sqSignals.push('Global Object (Static.SQUARESPACE_CONTEXT)');
+    if (generator.toLowerCase().includes('squarespace')) sqSignals.push('Meta Tag (generator="Squarespace")');
+    if (sqSignals.length > 0) {
+      addTech({
+        name: 'Squarespace',
+        category: 'CMS',
+        confidence: 98,
+        detectedBy: sqSignals,
+        website: 'https://www.squarespace.com',
+        description: 'All-in-one website and ecommerce platform.',
+      });
+    }
+
+    // Magento
+    const mageSignals = [];
+    if (win.Mage) mageSignals.push('Global Object (window.Mage)');
+    if (document.querySelector('script[src*="static/frontend/"], script[src*="mage/"]')) mageSignals.push('Script Resource (static/frontend/)');
+    if (cookies.includes('frontend=')) mageSignals.push('Cookie Signature (frontend=)');
+    if (mageSignals.length > 0) {
+      addTech({
+        name: 'Magento',
+        category: 'Ecommerce Platform',
+        confidence: 95,
+        detectedBy: mageSignals,
+        website: 'https://business.adobe.com/products/magento/magento-commerce.html',
+        description: 'Flexible enterprise ecommerce platform by Adobe.',
+      });
+    }
+
+    // WooCommerce
+    const wcSignals = [];
+    if (document.querySelector('.woocommerce, .woocommerce-page, link[href*="woocommerce"]')) wcSignals.push('DOM Element (.woocommerce)');
+    if (win.wc_add_to_cart_params || win.woocommerce_params) wcSignals.push('Global Object (window.wc_add_to_cart_params)');
+    if (scriptSrcs.some((s) => /woocommerce|wc-add-to-cart/i.test(s))) wcSignals.push('Script Resource');
+    if (wcSignals.length > 0) {
+      addTech({
+        name: 'WooCommerce',
+        category: 'Ecommerce Platform',
+        confidence: 96,
+        detectedBy: wcSignals,
+        website: 'https://woocommerce.com',
+        description: 'Open-source ecommerce plugin for WordPress.',
+      });
+    }
+
+    // 3. ANALYTICS & TAG MANAGERS
+    // Google Analytics
+    const gaSignals = [];
+    if (win.gtag || win.ga || win.GoogleAnalyticsObject) gaSignals.push('Global Object (window.gtag / ga)');
+    if (scriptSrcs.some((s) => /googletagmanager\.com\/gtag\/js|google-analytics\.com/i.test(s))) gaSignals.push('Script Resource (gtag.js)');
+    if (html.includes('UA-') || /G-[A-Z0-9]{8,12}/.test(html)) gaSignals.push('HTML Marker (Measurement ID)');
+    if (gaSignals.length > 0) {
+      addTech({
+        name: 'Google Analytics 4',
+        category: 'Analytics',
+        confidence: 98,
+        detectedBy: gaSignals,
+        website: 'https://analytics.google.com',
+        description: 'Enterprise web measurement and user journey analytics.',
+      });
+    }
+
+    // Google Tag Manager
+    const gtmSignals = [];
+    if (win.google_tag_manager || win.dataLayer) gtmSignals.push('Global Object (window.dataLayer / GTM)');
+    if (scriptSrcs.some((s) => /googletagmanager\.com\/gtm\.js/i.test(s))) gtmSignals.push('Script Resource (gtm.js)');
+    if (document.querySelector('iframe[src*="googletagmanager.com/ns.html"]')) gtmSignals.push('DOM Iframe (ns.html)');
+    if (gtmSignals.length > 0) {
+      addTech({
+        name: 'Google Tag Manager',
+        category: 'Tag Managers',
+        confidence: 99,
+        detectedBy: gtmSignals,
+        website: 'https://tagmanager.google.com',
+        description: 'Tag management system by Google.',
+      });
+    }
+
+    // Meta Pixel
+    const fbSignals = [];
+    if (win.fbq || win._fbq) fbSignals.push('Global Object (window.fbq)');
+    if (scriptSrcs.some((s) => /connect\.facebook\.net\/[a-z_]+\/fbevents\.js/i.test(s))) fbSignals.push('Script Resource (fbevents.js)');
+    if (fbSignals.length > 0) {
+      addTech({
+        name: 'Meta Pixel',
+        category: 'Analytics',
+        confidence: 97,
+        detectedBy: fbSignals,
+        website: 'https://www.facebook.com/business/tools/meta-pixel',
+        description: 'Conversion tracking and ad analytics for Meta platforms.',
+      });
+    }
+
+    // Hotjar
+    const hjSignals = [];
+    if (win.hj || win._hjSettings) hjSignals.push('Global Object (window.hj)');
+    if (scriptSrcs.some((s) => /static\.hotjar\.com\/c\/hotjar-/i.test(s))) hjSignals.push('Script Resource (hotjar.js)');
+    if (hjSignals.length > 0) {
+      addTech({
+        name: 'Hotjar',
+        category: 'Analytics',
+        confidence: 96,
+        detectedBy: hjSignals,
+        website: 'https://www.hotjar.com',
+        description: 'Behavior analytics, heatmaps, and session recordings.',
+      });
+    }
+
+    // Microsoft Clarity
+    const claritySignals = [];
+    if (win.clarity) claritySignals.push('Global Object (window.clarity)');
+    if (scriptSrcs.some((s) => /www\.clarity\.ms\/tag/i.test(s))) claritySignals.push('Script Resource (clarity.js)');
+    if (claritySignals.length > 0) {
+      addTech({
+        name: 'Microsoft Clarity',
+        category: 'Analytics',
+        confidence: 96,
+        detectedBy: claritySignals,
+        website: 'https://clarity.microsoft.com',
+        description: 'Free heatmap and session recording tool by Microsoft.',
+      });
+    }
+
+    // Adobe Analytics / Omniture
+    const adobeSignals = [];
+    if (win.s_gi || win.s_account || win.AppMeasurement || win.s?.version) adobeSignals.push('Global Object (window.s / AppMeasurement)');
+    if (scriptSrcs.some((s) => /adobedtm\.com|omniture|assets\.adobedtm\.com|analytics\.nike\.com|s_code\.js/i.test(s))) adobeSignals.push('Script Resource (Adobe Launch / DTM)');
+    if (adobeSignals.length > 0) {
+      addTech({
+        name: 'Adobe Analytics',
+        category: 'Analytics',
+        version: win.s?.version || undefined,
+        confidence: 97,
+        detectedBy: adobeSignals,
+        website: 'https://business.adobe.com/products/analytics/adobe-analytics.html',
+        description: 'Enterprise web analytics and customer journey intelligence by Adobe.',
+      });
+    }
+
+    // 4. CSS FRAMEWORKS & UI LIBRARIES
+    // Tailwind CSS
+    const tailwindElements = document.querySelectorAll('*[class*="flex"], *[class*="grid"], *[class*="text-"], *[class*="space-y-"]');
+    if (tailwindElements.length >= 5) {
+      const sample = Array.from(tailwindElements).slice(0, 50);
+      const isTailwind = sample.some((el) =>
+        typeof el.className === 'string' &&
+        /(flex|grid)\s+(items-center|justify-between|space-x-\d|p-\d|m-\d)/.test(el.className)
+      );
+      if (isTailwind) {
+        addTech({
+          name: 'Tailwind CSS',
+          category: 'CSS Frameworks',
+          confidence: 95,
+          detectedBy: ['DOM Class Signatures (Atomic Utilities)'],
+          website: 'https://tailwindcss.com',
+          description: 'Utility-first CSS framework for rapid UI development.',
+        });
+      }
+    }
+
+    // Bootstrap
+    const bsSignals = [];
+    if (document.querySelector('.container-fluid, .row > [class*="col-"], .btn-primary, link[href*="bootstrap"]')) bsSignals.push('DOM Classes (.container-fluid / .btn-primary)');
+    if (win.bootstrap) bsSignals.push('Global Object (window.bootstrap)');
+    if (scriptSrcs.some((s) => /bootstrap(\.bundle)?(\.min)?\.js/i.test(s))) bsSignals.push('Script Resource (bootstrap.js)');
+    if (bsSignals.length > 0) {
+      addTech({
+        name: 'Bootstrap',
+        category: 'CSS Frameworks',
+        confidence: 94,
+        detectedBy: bsSignals,
+        website: 'https://getbootstrap.com',
+        description: 'Frontend component toolkit.',
+      });
+    }
+
+    // Material UI
+    const muiSignals = [];
+    if (document.querySelector('*[class*="MuiButton-"], *[class*="MuiBox-"], *[class*="MuiTypography-"]')) muiSignals.push('DOM Class Signatures (Mui*-root)');
+    if (muiSignals.length > 0) {
+      addTech({
+        name: 'Material UI',
+        category: 'UI Libraries',
+        confidence: 94,
+        detectedBy: muiSignals,
+        website: 'https://mui.com',
+        description: 'React component library implementing Google Material Design.',
+      });
+    }
+
+    // 5. CDN & INFRASTRUCTURE
+    // Cloudflare
+    const cfSignals = [];
+    if (scriptSrcs.some((s) => /challenges\.cloudflare\.com|static\.cloudflareinsights\.com/i.test(s))) cfSignals.push('Script Resource (challenges.cloudflare.com)');
+    if (cookies.includes('__cf_bm') || cookies.includes('cf_clearance')) cfSignals.push('Cookie Signature (__cf_bm)');
+    if (html.includes('cloudflare') || document.querySelector('script[src*="cloudflare"]')) cfSignals.push('HTML Marker (cloudflare)');
+    if (cfSignals.length > 0) {
+      addTech({
+        name: 'Cloudflare',
+        category: 'CDN',
+        confidence: 94,
+        detectedBy: cfSignals,
+        website: 'https://www.cloudflare.com',
+        description: 'Global cloud network, CDN, and DDoS protection.',
+      });
+    }
+
+    // Fastly
+    const fastlySignals = [];
+    if (scriptSrcs.some((s) => /github\.githubassets\.com|fastly\.net/i.test(s)) || (window.location && window.location.hostname.includes('github.com'))) {
+      fastlySignals.push('CDN Host Signature (Fastly Edge Network)');
+    }
+    if (fastlySignals.length > 0) {
+      addTech({
+        name: 'Fastly',
+        category: 'CDN',
+        confidence: 95,
+        detectedBy: fastlySignals,
+        website: 'https://www.fastly.com',
+        description: 'Edge cloud platform and programmable CDN.',
+      });
+    }
+
+    // Akamai
+    const akamaiSignals = [];
+    if (scriptSrcs.some((s) => /akamai|edgesuite\.net|akamaiedge\.net/i.test(s))) akamaiSignals.push('Script Resource (edgesuite.net)');
+    if (akamaiSignals.length > 0) {
+      addTech({
+        name: 'Akamai',
+        category: 'CDN',
+        confidence: 94,
+        detectedBy: akamaiSignals,
+        website: 'https://www.akamai.com',
+        description: 'Global content delivery network.',
+      });
+    }
+
+    // 6. PAYMENT PROVIDERS
+    if (scriptSrcs.some((s) => /js\.stripe\.com\/v[23]/i.test(s)) || win.Stripe) {
+      addTech({
+        name: 'Stripe',
+        category: 'Payment Providers',
+        confidence: 98,
+        detectedBy: ['Script Resource (js.stripe.com)', 'Global Object (window.Stripe)'],
+        website: 'https://stripe.com',
+        description: 'Financial infrastructure and payment processing for the internet.',
+      });
+    }
+
+    if (scriptSrcs.some((s) => /paypal\.com\/sdk\/js|paypalobjects\.com/i.test(s)) || win.paypal) {
+      addTech({
+        name: 'PayPal',
+        category: 'Payment Providers',
+        confidence: 96,
+        detectedBy: ['Script Resource (paypal.com/sdk/js)'],
+        website: 'https://www.paypal.com',
+        description: 'Global online payments system.',
+      });
+    }
+
+    // 7. JAVASCRIPT LIBRARIES & FONTS
+    // jQuery
+    if (win.jQuery || win.$?.fn?.jquery) {
+      addTech({
+        name: 'jQuery',
+        category: 'JavaScript Libraries',
+        version: win.jQuery?.fn?.jquery || win.$?.fn?.jquery || undefined,
+        confidence: 99,
+        detectedBy: ['Global Object (window.jQuery)'],
+        website: 'https://jquery.com',
+        description: 'Fast, small, and feature-rich JavaScript library.',
+      });
+    }
+
+    // Google Fonts
+    if (linkHrefs.some((l) => /fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(l))) {
+      addTech({
+        name: 'Google Fonts',
+        category: 'Fonts',
+        confidence: 99,
+        detectedBy: ['DOM Link (fonts.googleapis.com)'],
+        website: 'https://fonts.google.com',
+        description: 'Library of open source font families.',
+      });
     }
 
     return list;

@@ -1,4 +1,5 @@
 import { FullDossier } from '../types';
+import { mapTechStackData } from './techstack/mapper';
 
 declare const chrome: any;
 
@@ -212,15 +213,7 @@ function buildDossierFromLiveData(liveData: any): FullDossier {
       ? `Live marketplace intelligence extracted from ${domain}. Discovered ${products.length} products on ${platform} (${pageType}).`
       : `Live website intelligence extracted from ${domain}. Analyzed SEO hierarchy and ${techCount} detected technologies.`;
 
-  // Group technologies by category
-  const categories: Record<string, any[]> = {};
-  if (Array.isArray(liveData.technologies)) {
-    liveData.technologies.forEach((tech: any) => {
-      const cat = tech.category || 'General';
-      if (!categories[cat]) categories[cat] = [];
-      categories[cat].push(tech);
-    });
-  }
+  const techStackData = mapTechStackData(liveData.technologies || []);
 
   return {
     id: `live_${Date.now()}`,
@@ -274,11 +267,7 @@ function buildDossierFromLiveData(liveData: any): FullDossier {
       twitter_cards: liveData.twitterCards || {},
       structured_data: liveData.structuredData || { has_json_ld: false, detected_types: [], count: 0, items: [] },
     },
-    tech_stack: {
-      total_detected: techCount,
-      categories,
-      technologies: liveData.technologies || [],
-    },
+    tech_stack: techStackData,
     traffic: {
       source: 'Browser Traffic',
       status: 'unmetered',
@@ -493,3 +482,56 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Exports Tech Stack specifically as CSV.
+ */
+export function exportTechStackCSV(dossier: FullDossier) {
+  const domain = dossier.domain || 'website';
+  const techs = dossier.tech_stack?.technologies || [];
+
+  if (techs.length === 0) {
+    const emptyBlob = new Blob(['No technologies detected\n'], { type: 'text/csv;charset=utf-8;' });
+    downloadBlob(emptyBlob, `techstack-${domain}.csv`);
+    return;
+  }
+
+  const headers = ['Name', 'Category', 'Version', 'Confidence (%)', 'Detection Methods', 'Official Website', 'Description'];
+  const rows = [headers.join(',')];
+
+  for (const t of techs) {
+    const row = [
+      `"${(t.name || '').replace(/"/g, '""')}"`,
+      `"${(t.category || '').replace(/"/g, '""')}"`,
+      `"${(t.version || '—').replace(/"/g, '""')}"`,
+      `"${t.confidence}%"`,
+      `"${(t.detectedBy || []).join('; ').replace(/"/g, '""')}"`,
+      `"${(t.website || '').replace(/"/g, '""')}"`,
+      `"${(t.description || '').replace(/"/g, '""')}"`,
+    ];
+    rows.push(row.join(','));
+  }
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  downloadBlob(blob, `techstack-${domain}.csv`);
+}
+
+/**
+ * Exports Tech Stack specifically as JSON.
+ */
+export function exportTechStackJSON(dossier: FullDossier) {
+  const domain = dossier.domain || 'website';
+  const data = dossier.tech_stack || { total_detected: 0, categories: {}, technologies: [] };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `techstack-${domain}.json`);
+}
+
+/**
+ * Exports Complete Intelligence Report as full JSON.
+ */
+export function exportCompleteReport(dossier: FullDossier) {
+  const domain = dossier.domain || 'website';
+  const blob = new Blob([JSON.stringify(dossier, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `complete-report-${domain}.json`);
+}
+

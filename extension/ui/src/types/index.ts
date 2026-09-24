@@ -108,6 +108,9 @@ export interface TechItem {
   confidence: number;
   version?: string;
   icon?: string;
+  detectedBy?: string[];
+  website?: string;
+  description?: string;
 }
 
 export interface TechStackData {
