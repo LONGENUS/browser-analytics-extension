@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Loader2, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 interface LoginProps {
@@ -39,6 +39,22 @@ export const Login: React.FC<LoginProps> = ({
     }
   };
 
+  const handleQuickAdminLogin = async () => {
+    setEmail('admin@webintel.io');
+    setPassword('admin123456');
+    setIsLoading(true);
+    setError(null);
+
+    const res = await authService.signInWithPassword('admin@webintel.io', 'admin123456');
+    setIsLoading(false);
+
+    if (res.success) {
+      onSuccess();
+    } else {
+      setError(res.error || 'Admin login failed.');
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     setError(null);
@@ -70,6 +86,45 @@ export const Login: React.FC<LoginProps> = ({
           <span>{error}</span>
         </div>
       )}
+
+      {/* Quick Admin Demo Login Card */}
+      <div className="p-3 rounded-xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">
+              Admin & Pro Access
+            </span>
+          </div>
+          <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+            PRO PLAN
+          </span>
+        </div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="flex justify-between items-center text-[10px] font-mono bg-white/70 dark:bg-slate-900/70 p-1.5 rounded border border-slate-200/60 dark:border-slate-800/60">
+            <span>Email: <strong className="text-slate-700 dark:text-slate-200">admin@webintel.io</strong></span>
+            <span>Pass: <strong className="text-slate-700 dark:text-slate-200">admin123456</strong></span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleQuickAdminLogin}
+          disabled={isLoading || isGoogleLoading}
+          className="w-full py-1.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+        >
+          {isLoading && email === 'admin@webintel.io' ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <>
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
+              <span>1-Click Admin Login</span>
+            </>
+          )}
+        </button>
+      </div>
 
       {/* Google OAuth Button */}
       <button

