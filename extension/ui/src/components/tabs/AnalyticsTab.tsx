@@ -237,16 +237,9 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ dossier, isAnalyzing
             Source: Browser Traffic • Real-Time Telemetry
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          {trafficData.globalRank && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-              #{trafficData.globalRank.toLocaleString()} Global
-            </span>
-          )}
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-            Live
-          </span>
-        </div>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+          Live Data
+        </span>
       </div>
 
       {/* 2. 4 Primary KPI Cards */}
