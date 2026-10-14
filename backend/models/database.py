@@ -747,9 +747,25 @@ async def init_db():
         print(f"[WARN] Database initialization deferred: {e}")
 
 
+_db_initialized = False
+
+
+async def ensure_db_initialized():
+    """Lazily ensures database tables exist on cold-start (critical for serverless)."""
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            await init_db()
+            _db_initialized = True
+        except Exception as e:
+            print(f"[WARN] Lazy database initialization failed: {e}")
+
+
 # --- Dependency ---
 async def get_db():
     """FastAPI dependency that yields a database session."""
+    if not _db_initialized:
+        await ensure_db_initialized()
     async with AsyncSessionLocal() as session:
         try:
             yield session
