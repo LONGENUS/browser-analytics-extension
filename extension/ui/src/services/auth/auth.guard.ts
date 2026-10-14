@@ -1,5 +1,5 @@
 /**
- * WebIntel Auth Guard & Route Protection
+ * TailorResume Auth Guard & Route Protection
  * Specifies protected modules vs public modules, and guards user actions.
  * Public modules may always analyze websites; protected modules require active authentication.
  */

@@ -1,5 +1,5 @@
 /* ========================================
-   WebIntel — Background Service Worker
+   TailorResume — Background Service Worker
    ======================================== */
 
 try {
@@ -19,80 +19,18 @@ async function getApiBase() {
 
 // --- Message Handler ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'ANALYZE_URL') {
-    analyzeUrl(message.url, message.title)
-      .then(result => sendResponse({ success: true, data: result }))
+  if (message.type === 'PING') {
+    sendResponse({ success: true, message: 'TailorResume service worker active' });
+    return false;
+  }
+
+  if (message.type === 'GET_CONFIG') {
+    getApiBase()
+      .then(apiBase => sendResponse({ success: true, apiBase }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true; // Keep channel open for async response
   }
-
-  if (message.type === 'EXPORT') {
-    exportData(message.format, message.data)
-      .then(blob => sendResponse({ success: true, data: blob }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-
-  if (message.type === 'GET_HISTORY') {
-    getHistory()
-      .then(data => sendResponse({ success: true, data }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
 });
-
-// --- API Calls ---
-async function analyzeUrl(url, title) {
-  const apiBase = await getApiBase();
-  const response = await fetch(`${apiBase}/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, title })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error (${response.status})`);
-  }
-
-  return response.json();
-}
-
-async function exportData(format, data) {
-  const apiBase = await getApiBase();
-  const response = await fetch(`${apiBase}/export/${format}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Export failed (${response.status})`);
-  }
-
-  return response.blob();
-}
-
-async function getHistory() {
-  const apiBase = await getApiBase();
-  const response = await fetch(`${apiBase}/history`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
-  });
-
-  if (!response.ok) {
-    throw new Error(`History fetch failed (${response.status})`);
-  }
-
-  return response.json();
-}
-
-// --- Badge Updates ---
-function updateBadge(count) {
-  chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
-  chrome.action.setBadgeBackgroundColor({ color: '#6366f1' });
-  chrome.action.setBadgeTextColor({ color: '#ffffff' });
-}
 
 // --- Side Panel Behavior ---
 if (typeof chrome !== 'undefined' && chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
@@ -100,3 +38,15 @@ if (typeof chrome !== 'undefined' && chrome.sidePanel && chrome.sidePanel.setPan
     .catch((error) => console.warn('Could not set side panel behavior:', error));
 }
 
+// Fallback action click handler to open side panel
+if (typeof chrome !== 'undefined' && chrome.action && chrome.sidePanel && chrome.sidePanel.open) {
+  chrome.action.onClicked.addListener(async (tab) => {
+    try {
+      if (tab && tab.windowId) {
+        await chrome.sidePanel.open({ windowId: tab.windowId });
+      }
+    } catch (e) {
+      console.warn('Could not open side panel on action click:', e);
+    }
+  });
+}

@@ -1,13 +1,15 @@
-# Browser Analytics Extension
+# TailorResume — AI Resume Tailoring Platform & Browser Extension
 
-[![CI](https://github.com/LONGENUS/browser-analytics-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/LONGENUS/browser-analytics-extension/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![React: 18](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev/)
+[![TypeScript: 5+](https://img.shields.io/badge/TypeScript-5+-blue.svg)](https://www.typescriptlang.org/)
 [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Vercel](https://img.shields.io/badge/Deployment-Vercel-black.svg)](https://vercel.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Supabase](https://img.shields.io/badge/Database-Supabase%20PostgreSQL-3ECF8E.svg)](https://supabase.com)
+[![Vercel](https://img.shields.io/badge/Deployment-Vercel-black.svg)](https://vercel.com)
 
-An AI-powered web intelligence and extraction Chrome Extension paired with an asynchronous FastAPI backend, ready for local development and cloud production deployment on **Vercel** and **Supabase**. Extract structured product data, calculate real-time analytics, inspect SEO metadata, and export reports in CSV, Excel, or JSON formats in a single click.
+A modern resume-tailoring platform consisting of a web application and Chrome extension side panel that empowers users to maintain structured resumes, import existing resumes (PDF/DOCX), and manage job application drafts.
 
 ---
 
@@ -16,248 +18,180 @@ An AI-powered web intelligence and extraction Chrome Extension paired with an as
 ```mermaid
 flowchart TD
     subgraph Client["Client Tier"]
-        CE["Chrome Extension (Manifest V3)\n• Popup UI (Vanilla JS + CSS)\n• Background Service Worker\n• Dynamic Config (config.js)"]
+        EXT["Chrome Extension (Manifest V3)\n• Side Panel (React 18 + Vite)\n• Background Service Worker\n• Dynamic Config (config.js)"]
+        WEB["Web Application Dashboard\n• Resume Editor & Manager\n• Import & Review Workspace"]
     end
 
-    subgraph Hosting["Hosting & API Tier"]
-        Vercel["Vercel Serverless Platform\n• ASGI Entrypoint (api/index.py)\n• Route Rewrites (vercel.json)\n• Edge CDN & CORS Headers"]
-        Local["Localhost:8000\n• FastAPI Core (backend/app.py)\n• Crawl4AI + Playwright"]
+    subgraph API["API & Application Tier"]
+        FastAPI["FastAPI Backend\n• Auth Router (/auth)\n• Resumes Router (/api/resumes)\n• Resume Import Router (/api/resumes/import)"]
+        Vercel["Vercel Serverless Platform\n• ASGI Entrypoint (api/index.py)\n• Route Rewrites (vercel.json)"]
     end
 
     subgraph Database["Persistence & Auth Tier"]
-        SupaDB[("Supabase PostgreSQL\n• Tables: users, analyses, exports\n• Row Level Security (RLS)\n• JSONB Metrics & Indexes")]
-        SQLite[("Local SQLite\n(backend/webintel.db)")]
+        SupabaseAuth["Supabase Authentication\n• JWT Token Issuance & Rotation\n• Session Management"]
+        SupabaseDB[("Supabase PostgreSQL\n• profiles\n• resumes & child sections\n• resume_imports\n• Row Level Security (RLS)")]
+        SupabaseStorage[("Supabase Storage\n• 'resumes' Bucket (Private / Encrypted)")]
     end
 
-    CE -- "Production (HTTPS)" --> Vercel
-    CE -- "Development (HTTP)" --> Local
-    Vercel -- "asyncpg / Transaction Pooler (6543)" --> SupaDB
-    Local -- "aiosqlite" --> SQLite
-    Local -.-> SupaDB
+    EXT --> FastAPI
+    WEB --> FastAPI
+    FastAPI --> SupabaseAuth
+    FastAPI --> SupabaseDB
+    FastAPI --> SupabaseStorage
+    Vercel --> FastAPI
 ```
 
 ---
 
-## Table of Contents
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Folder Structure](#folder-structure)
-- [Production Deployment](#production-deployment)
-  - [1. Supabase Setup](#1-supabase-setup)
-  - [2. Vercel Deployment](#2-vercel-deployment)
-  - [3. Chrome Extension Configuration](#3-chrome-extension-configuration)
-- [Local Development](#local-development)
-- [Environment Variables](#environment-variables)
-- [CI/CD Pipeline](#cicd-pipeline)
-- [Git Workflow](#git-workflow)
-- [Security Checklist](#security-checklist)
-- [License](#license)
+## Key Modules & Capabilities
+
+- **Module 1 — Authentication & Identity System**:
+  - Secure authentication powered by Supabase Auth.
+  - JWT validation with HMAC SHA-256 and refresh token rotation.
+  - Profile persistence with row-level security (RLS).
+  - Session preservation across extension and browser restarts.
+
+- **Module 2 — Structured Resume Management**:
+  - Full relational data model for resumes: personal info, summary, work experience, experience bullets, education, skills, projects, certifications, and portfolio links.
+  - Cascade deletion and user ownership isolation.
+  - Interactive Resume Dashboard and structured field editor.
+  - Master resume selection and one-click duplication.
+
+- **Module 3 — Resume Import & Deterministic Parsing**:
+  - High-fidelity PDF and DOCX file extraction via `pdfplumber` and `python-docx`.
+  - Deterministic regex section segmentation and experience parsing.
+  - Interactive import review modal before saving to structured resume storage.
+  - Private file persistence in Supabase Storage.
+
+- **Module 4 — Job Detection & Job Description Extraction**:
+  - Deterministic extraction from active browser tabs and job URLs.
+  - Supported site adapters: LinkedIn, Naukri, Indeed, and ATS platforms (Greenhouse, Lever, Workday, Ashby, SmartRecruiters).
+  - JSON-LD `JobPosting` schema traversal, semantic DOM fallback, and manual paste fallback.
+  - Saved jobs library with deduplication and canonicalization.
+
+- **Module 5 — Deterministic Job ↔ Resume Matching Engine**:
+  - Authoritative backend matching algorithm (versioned, explainable).
+  - 5-category scoring breakdown: Skills, Responsibilities, Experience, Qualifications, Keywords.
+  - Evidence citations and freshness detection.
+
+- **Module 6 — Resume Tailoring Engine**:
+  - Grounded, fact-preserving tailoring engine (Conservative, Balanced, Strong modes).
+  - Strict immutability: Master resumes are never modified or overwritten.
+  - Generates tailored drafts and stores them as distinct, traceable versions with change logs.
+
+- **Module 7 — Resume Templates & Preview**:
+  - Real-time HTML/CSS resume template renderer.
+  - 3 professional templates: ATS Classic, Professional, and Compact.
+  - Zoom controls, print styling, responsive multi-page preview.
+
+- **Module 8 — PDF / DOCX Generation**:
+  - Server-side vector PDF generation via pure-Python `reportlab` (ATS-compliant, selectable text).
+  - Native editable Microsoft Word `.docx` generation via `python-docx` with embedded OpenXML hyperlinks and bullet styles.
+  - Direct in-memory streaming with RFC 5987 `Content-Disposition` and multi-tenant security isolation.
+
+- **Module 9 — Chrome Extension Integration**:
+  - Manifest V3 compliant side panel primary workflow (`activeTab`, `sidePanel`, `storage`, `scripting`).
+  - Active tab job detection and instant tailoring directly on job listings.
+  - End-to-end user workflow: Detect Job -> Review Details -> Select Master Resume -> Analyze Match -> Tailor Resume -> Preview -> Export PDF/DOCX.
+  - Zero surveillance, zero background tracking, and secure Supabase token handling.
 
 ---
 
-## Key Features
+## Repository Structure
 
-- **One-Click Page Intelligence**: Instantly identify product listings, pricing distributions, unique ASINs, brands, and ratings.
-- **Deep DOM Crawling (Crawl4AI & Playwright)**: Employs headless browser automation tailored to handle JavaScript-heavy platforms like Amazon and Flipkart.
-- **SEO & Structure Inspection**: Extracts meta descriptions, headings (H1–H6), canonical URLs, and structured schema tags.
-- **Dynamic Summarization**: Automatically produces structured bulleted summaries (or optional GPT-powered contextual overviews).
-- **Multi-Format Export**: One-click download of collected data to `.csv`, `.xlsx` (Excel), or `.json`.
-- **Hybrid Cloud Storage**: Historical runs persisted to Supabase PostgreSQL in production or SQLite in local development.
-- **Serverless Ready**: Configured for zero-config ASGI deployment on Vercel with automated GitHub CI integration.
-
----
-
-## Tech Stack
-
-| Component | Technology | Description |
-|---|---|---|
-| **Extension Core** | Chrome Manifest V3 | Modern service worker & isolated content scripts |
-| **Extension UI** | HTML5, Vanilla CSS3, JavaScript | Lightweight, zero-dependency responsive popup |
-| **Cloud Hosting** | Vercel Serverless | ASGI serverless execution with `/api/index.py` |
-| **Production DB** | Supabase (PostgreSQL 15+) | Managed PostgreSQL, Row Level Security, JSONB |
-| **Local Backend** | FastAPI (Python 3.11+) | Asynchronous REST endpoints |
-| **Crawler Engine** | Crawl4AI + Playwright | Anti-detection, headless DOM parsing |
-| **ORM & Drivers** | SQLAlchemy 2.0 + asyncpg | Async connection pooling & automatic dialect detection |
-| **Export Formats** | Pandas, OpenPyXL, CSV | Structured tabular exports |
-| **CI/CD** | GitHub Actions | Automated manifest, JS syntax, and Python compilation |
-
----
-
-## Folder Structure
-
-```
-browser-analytics-extension/
-├── .github/
-│   └── workflows/
-│       └── ci.yml               # GitHub Actions CI workflow (Extension + Backend + Migrations)
+```text
 ├── api/
-│   └── index.py                 # Vercel ASGI serverless wrapper
-├── backend/                     # FastAPI Backend & Crawler Service
-│   ├── app.py                   # Application entry point
-│   ├── config.py                # Environment configuration & asyncpg normalizer
-│   ├── requirements.txt         # Backend Python dependencies
-│   ├── Dockerfile               # Container definition
-│   ├── models/                  # SQLAlchemy database models (PostgreSQL & SQLite)
-│   ├── routes/                  # API routes (analyze, export, history)
-│   ├── schemas/                 # Extraction CSS selectors & schemas
-│   └── services/                # Crawler, analytics, and exporter services
-├── extension/                   # Chrome Extension (Manifest V3)
-│   ├── manifest.json            # Extension manifest configuration
-│   ├── config.js                # Centralized environment & API configuration
-│   ├── popup/                   # Extension popup interface & logic
-│   ├── content/                 # Content script for live DOM interaction
-│   ├── background/              # Background service worker & API broker
-│   ├── utils/                   # Client-side API and export helpers
-│   └── assets/                  # Icons and static resources
+│   └── index.py                     # Vercel serverless ASGI entrypoint
+├── backend/
+│   ├── app.py                       # FastAPI core application
+│   ├── config.py                    # Environment settings
+│   ├── database.py                  # Database connection & pooling
+│   ├── models/
+│   │   └── database.py              # Relational models (profiles, resumes, imports)
+│   ├── routes/
+│   │   ├── auth.py                  # Authentication endpoints
+│   │   ├── resumes.py               # Structured resume CRUD endpoints
+│   │   └── resume_imports.py        # PDF/DOCX upload & parsing endpoints
+│   └── services/
+│       ├── auth_service.py          # JWT verification & profile management
+│       ├── resume_service.py        # Structured resume business logic
+│       ├── resume_parser.py         # Deterministic PDF/DOCX extraction & parsing
+│       └── storage_service.py       # Supabase Storage client
+├── extension/
+│   ├── manifest.json                # Chrome Manifest V3
+│   ├── config.js                    # Extension API configuration
+│   ├── sidepanel.html               # Side panel entrypoint
+│   ├── background/
+│   │   └── service-worker.js        # Background service worker shell
+│   ├── content/
+│   │   └── content.js               # Content script foundation
+│   └── ui/                          # React + TypeScript side panel UI
+│       ├── src/
+│       │   ├── App.tsx              # Main UI component
+│       │   ├── components/resume/   # Resume dashboard & editor
+│       │   ├── components/auth/     # Auth modal & user profile
+│       │   └── services/            # API & Auth clients
+│       └── package.json
 ├── supabase/
-│   └── migrations/
-│       └── 20260923000001_create_schema.sql  # PostgreSQL schema, tables & RLS policies
-├── docs/                        # Project documentation
-│   ├── ARCHITECTURE.md          # Detailed architectural breakdown
-│   └── API.md                   # REST API specification
-├── shared/                      # Shared types & JSON schemas
-├── .env.example                 # Root environment variables template
-├── requirements.txt             # Root Python requirements for Vercel builder
-├── vercel.json                  # Vercel routing rewrites & security headers
-├── docker-compose.yml           # Multi-container orchestration
-├── .gitignore                   # Version control ignore rules
-├── LICENSE                      # MIT License
-└── README.md                    # Project documentation
+│   └── migrations/                  # Schema migrations & RLS policies
+└── tests/                           # End-to-end and regression test suites
 ```
 
 ---
 
-## Production Deployment
-
-### 1. Supabase Setup
-
-1. Create a free project at [supabase.com](https://supabase.com).
-2. Open the **SQL Editor** in the Supabase Dashboard.
-3. Open `supabase/migrations/20260923000001_create_schema.sql`, copy its content, and execute it.
-   - This creates `users`, `analyses`, and `exports` tables with indexing and Row Level Security (RLS).
-4. Navigate to **Project Settings -> Database** and copy the **Connection string** (URI). Select **Transaction Pooler** (port `6543`) for serverless environments.
-5. Navigate to **Project Settings -> API** to retrieve your `SUPABASE_URL`, `anon public key`, and `service_role secret`.
-
-### 2. Vercel Deployment
-
-1. Push your repository to GitHub: `https://github.com/LONGENUS/browser-analytics-extension`.
-2. Log in to [Vercel](https://vercel.com) and click **Add New -> Project**.
-3. Import the `browser-analytics-extension` GitHub repository.
-4. Set the **Framework Preset** to **Other** (Root directory `./`).
-5. Configure the following **Environment Variables** in the Vercel dashboard:
-   - `DATABASE_URL`: `postgresql+asyncpg://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`
-   - `SUPABASE_URL`: `https://[PROJECT-REF].supabase.co`
-   - `SUPABASE_ANON_KEY`: `eyJhbGciOi...`
-   - `SUPABASE_SERVICE_ROLE_KEY`: `eyJhbGciOi...`
-   - `API_BASE_URL`: `https://your-vercel-project.vercel.app`
-   - `DEBUG`: `false`
-6. Click **Deploy**. Vercel will build the ASGI function at `/api/index.py` using `requirements.txt`.
-
-### 3. Chrome Extension Configuration
-
-1. In `extension/config.js`, set `ENVIRONMENT: 'production'` and verify your Vercel deployment URL:
-   ```javascript
-   ENVIRONMENTS: {
-     production: {
-       API_BASE_URL: 'https://your-vercel-project.vercel.app',
-       SUPABASE_URL: 'https://your-project-ref.supabase.co',
-       TIMEOUT_MS: 60000,
-     }
-   }
-   ```
-2. In Google Chrome:
-   - Navigate to `chrome://extensions`.
-   - Enable **Developer mode**.
-   - Click **Load unpacked** and select the `extension/` directory.
-3. You can also override the API endpoint at runtime in the extension settings without modifying code.
-
----
-
-## Local Development
+## Local Development Setup
 
 ### 1. Backend Setup
+
 ```bash
+# Navigate to backend directory
 cd backend
-python -m venv venv
 
-# Windows
-.\venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-
+# Install dependencies
 pip install -r requirements.txt
-playwright install chromium
+
+# Start FastAPI server
+uvicorn backend.app:app --reload --port 8000
 ```
 
-### 2. Running Local Backend
+### 2. Extension UI Setup
+
 ```bash
-python app.py
-```
-The local server runs on `http://localhost:8000` with interactive Swagger docs at `http://localhost:8000/docs`.
+# Navigate to extension UI directory
+cd extension/ui
 
-### 3. Extension Local Testing
-In `extension/config.js`, set `ENVIRONMENT: 'development'` to route extension calls to `http://localhost:8000`.
+# Install dependencies
+npm install
+
+# Start Vite dev server or build for extension
+npm run build
+```
+
+### 3. Load Extension in Chrome
+
+1. Open `chrome://extensions/` in Google Chrome.
+2. Enable **Developer mode** (toggle in upper right).
+3. Click **Load unpacked** and select the `extension/` directory.
 
 ---
 
 ## Environment Variables
 
-| Variable | Required in Prod | Description | Default / Example |
-|---|---|---|---|
-| `API_BASE_URL` | Yes | Base URL used by clients | `https://your-project.vercel.app` |
-| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql+asyncpg://postgres:...@pooler.supabase.com:6543/postgres` |
-| `SUPABASE_URL` | Yes | Supabase project API URL | `https://[ref].supabase.co` |
-| `SUPABASE_ANON_KEY` | Yes | Supabase client anon key | `eyJhbGciOi...` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Optional | Supabase admin key | `eyJhbGciOi...` |
-| `DEBUG` | No | FastAPI debug mode | `false` |
-| `REDIS_URL` | No | Redis caching endpoint | Empty (disabled) |
-| `OPENAI_API_KEY` | No | OpenAI key for AI summaries | Optional |
+Copy `.env.example` to `.env` and provide your Supabase credentials:
 
----
-
-## CI/CD Pipeline
-
-The project uses GitHub Actions (`.github/workflows/ci.yml`) to enforce code standards before any merge:
-- **Chrome Extension**: Validates Manifest V3 specifications and validates JavaScript syntax on all extension scripts (`config.js`, `api.js`, `service-worker.js`, `popup.js`).
-- **Backend & Serverless API**: Compiles Python backend modules and the `api/index.py` Vercel ASGI gateway.
-- **Deployment Specs**: Validates `vercel.json` routing structure and ensures Supabase SQL schema migrations syntax is intact.
-
----
-
-## Git Workflow
-
-To maintain code quality and keep `main` stable, all changes follow a strict pull-request workflow:
-
-```
-           git checkout -b feature/xyz
-(main) ──────────────────────────────────▶ (feature/xyz)
-  │                                            │
-  │                                            │ Make atomic commits
-  │                                            ▼
-  │                                      Push branch to GitHub
-  │                                            │
-  │◀───────────────────────────────────────────┘
-               Open Pull Request & Merge
+```bash
+cp .env.example .env
 ```
 
-1. **Create Branch**: `git checkout -b feature/<name>`
-2. **Commit Changes**: `git commit -m "feat: description"`
-3. **Push Branch**: `git push origin feature/<name>`
-4. **Open PR**: Create a Pull Request into `main` on GitHub and verify CI passes.
-5. **Never commit directly to `main`**.
-
----
-
-## Security Checklist
-
-- [x] **No Secrets in Source**: `.env` is gitignored; `.env.example` provides templates.
-- [x] **Row Level Security (RLS)**: Supabase tables enforce user-isolated data access.
-- [x] **HTTPS Host Permissions**: Manifest V3 scopes permissions strictly to verified origins.
-- [x] **CORS Whitelist**: Configured in `backend/config.py` and `vercel.json` for extension and production origins.
+Key configuration variables:
+- `SUPABASE_URL`: Supabase project URL
+- `SUPABASE_ANON_KEY`: Supabase anon/public key
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (backend only)
+- `DATABASE_URL`: PostgreSQL connection string (Supabase Transaction Pooler)
+- `SUPABASE_RESUME_BUCKET`: Private storage bucket name (`resumes`)
 
 ---
 
 ## License
 
-Distributed under the [MIT License](LICENSE). Copyright (c) 2026 Longenus.
+MIT License.

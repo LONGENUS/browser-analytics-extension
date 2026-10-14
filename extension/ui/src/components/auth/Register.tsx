@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Mail, Lock, User, Loader2, ArrowRight, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User, Loader2, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 interface RegisterProps {
@@ -15,6 +15,8 @@ export const Register: React.FC<RegisterProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsVerification, setNeedsVerification] = useState(false);
@@ -111,7 +113,7 @@ export const Register: React.FC<RegisterProps> = ({
           Create an account
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Get started with free cloud synchronization and history
+          Sign up to access your centralized account and sync your applications
         </p>
       </div>
 
@@ -135,6 +137,7 @@ export const Register: React.FC<RegisterProps> = ({
               placeholder="Alex Johnson"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
+              autoComplete="name"
               className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
           </div>
@@ -153,6 +156,7 @@ export const Register: React.FC<RegisterProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
           </div>
@@ -166,13 +170,23 @@ export const Register: React.FC<RegisterProps> = ({
           <div className="relative">
             <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+              autoComplete="new-password"
+              className="w-full pl-8 pr-9 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              tabIndex={-1}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
           </div>
 
           {/* Strong Password Indicator */}
@@ -208,13 +222,23 @@ export const Register: React.FC<RegisterProps> = ({
           <div className="relative">
             <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
-              type="password"
+              type={showConfirmPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+              autoComplete="new-password"
+              className="w-full pl-8 pr-9 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              tabIndex={-1}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+            >
+              {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
           </div>
         </div>
 

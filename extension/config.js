@@ -1,18 +1,18 @@
 /* ==============================================================================
-   WebIntel — Extension Configuration
+   TailorResume — Extension Configuration
    Centralized environment management for local development & Vercel production.
    ============================================================================== */
 
 const APP_CONFIG = {
-  // Active environment: 'production' or 'development'
+  // Active environment: 'development' or 'production'
+  // When 'development', the extension connects to local backend on http://localhost:8000.
   // When 'production', the extension queries the Vercel deployed API.
-  // When 'development', the extension falls back to local FastAPI on http://localhost:8000.
   ENVIRONMENT: 'production',
 
   ENVIRONMENTS: {
     production: {
       API_BASE_URL: 'https://browser-analytics-extension-longenus05-3620s-projects.vercel.app',
-      SUPABASE_URL: 'https://your-project.supabase.co',
+      SUPABASE_URL: '',
       TIMEOUT_MS: 60000,
     },
     development: {

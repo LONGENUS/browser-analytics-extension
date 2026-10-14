@@ -1,5 +1,5 @@
 """
-WebIntel — Vercel Serverless API Gateway
+TailorResume — Vercel Serverless API Gateway
 Provides FastAPI entrypoint for Vercel Serverless Functions with zero-downtime fallbacks.
 """
 
@@ -15,18 +15,20 @@ from fastapi.responses import JSONResponse
 
 # Top-level application instance for Vercel
 app = FastAPI(
-    title="WebIntel",
+    title="TailorResume",
     version="1.0.0",
     description="AI-powered website intelligence and analytics API (Vercel Serverless Gateway)"
 )
 
 # CORS configuration
+# Restricts origins to Chrome extension IDs, local dev, and Vercel production domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^(chrome-extension://.*|http://localhost(:\d+)?|http://127\.0\.0\.1(:\d+)?|https://.*\.vercel\.app)$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Resume-SHA256", "X-File-Type"],
 )
 
 # Route Normalization Middleware for Vercel Serverless
@@ -97,23 +99,31 @@ for p in (cwd, backend_dir, root_dir, file_backend_dir):
 _init_error = None
 
 try:
-    from routes.analyze import router as analyze_router
-    from routes.overview import router as overview_router
-    from routes.products import router as products_router
-    from routes.seo import router as seo_router
-    from routes.tech import router as tech_router
-    from routes.traffic import router as traffic_router
-    from routes.export import router as export_router
-    from routes.history import router as history_router
+    from routes.auth import router as auth_router
+    from routes.resumes import router as resumes_router
+    from routes.resume_imports import router as resume_imports_router
+    from routes.jobs import router as jobs_router
+    from routes.job_matches import router as job_matches_router
+    from routes.tailoring import router as tailoring_router
+    from routes.resume_export import router as resume_export_router
+    from routes.dashboard import router as dashboard_router
 
-    app.include_router(analyze_router, tags=["Analysis"])
-    app.include_router(overview_router, prefix="/overview", tags=["Overview"])
-    app.include_router(products_router, prefix="/products", tags=["Products"])
-    app.include_router(seo_router, prefix="/seo", tags=["SEO"])
-    app.include_router(tech_router, prefix="/tech", tags=["Technology"])
-    app.include_router(traffic_router, prefix="/traffic", tags=["Traffic"])
-    app.include_router(export_router, prefix="/export", tags=["Export"])
-    app.include_router(history_router, prefix="/history", tags=["History"])
+    app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+    app.include_router(auth_router, prefix="/user", tags=["User Profile"])
+    app.include_router(resume_imports_router, prefix="/api/resumes/import", tags=["Resume Import"])
+    app.include_router(resume_imports_router, prefix="/resumes/import", tags=["Resume Import"])
+    app.include_router(tailoring_router, prefix="/api/resumes", tags=["Resume Tailoring"])
+    app.include_router(tailoring_router, prefix="/resumes", tags=["Resume Tailoring"])
+    app.include_router(resume_export_router, prefix="/api/resumes", tags=["Resume Export"])
+    app.include_router(resume_export_router, prefix="/resumes", tags=["Resume Export"])
+    app.include_router(resumes_router, prefix="/api/resumes", tags=["Resumes"])
+    app.include_router(resumes_router, prefix="/resumes", tags=["Resumes"])
+    app.include_router(jobs_router, prefix="/api/jobs", tags=["Jobs"])
+    app.include_router(jobs_router, prefix="/jobs", tags=["Jobs"])
+    app.include_router(job_matches_router, prefix="/api/jobs", tags=["Job Matches"])
+    app.include_router(job_matches_router, prefix="/jobs", tags=["Job Matches"])
+    app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
+    app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
 except Exception as e:
     _init_error = {
         "error": str(e),
@@ -129,9 +139,10 @@ except Exception as e:
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
+    traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__, "traceback": traceback.format_exc()}
+        content={"detail": "An internal server error occurred.", "type": type(exc).__name__}
     )
 
 
@@ -142,25 +153,27 @@ async def health(request: Request):
     if _init_error:
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": "Backend module import failed", "diagnostic": _init_error}
+            content={"status": "error", "message": "Backend initialization failed"}
         )
     return {
         "status": "healthy",
-        "app": "WebIntel",
-        "version": "1.0.2",
+        "app": "TailorResume",
+        "version": "2.0.0",
         "platform": "vercel-serverless",
-        "scope_path": request.scope.get("path"),
-        "headers": {k: v for k, v in request.headers.items() if "auth" not in k.lower()}
     }
 
 
 @app.get("/debug")
 async def debug(request: Request):
+    debug_secret = os.environ.get("DEBUG_ENDPOINT_SECRET")
+    provided = request.headers.get("x-debug-secret") or request.query_params.get("secret")
+    if not debug_secret or provided != debug_secret:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Debug endpoint is disabled in production."}
+        )
     return {
-        "init_error": _init_error,
-        "cwd": os.getcwd(),
-        "files": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else [],
-        "sys_path": sys.path,
-        "scope_path": request.scope.get("path"),
-        "headers": {k: v for k, v in request.headers.items() if "auth" not in k.lower()}
+        "status": "debug",
+        "platform": "vercel-serverless",
+        "initialized": _init_error is None,
     }

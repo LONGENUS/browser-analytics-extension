@@ -1,5 +1,5 @@
 """
-WebIntel — Configuration Module
+TailorResume — Configuration Module
 Manages all environment variables and settings via Pydantic Settings.
 """
 
@@ -14,23 +14,23 @@ def _get_default_database_url() -> str:
     # If running in serverless environment (Vercel / Lambda) without custom DATABASE_URL,
     # use /tmp which is the only writable directory.
     if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-        return "sqlite+aiosqlite:////tmp/webintel.db"
-    return f"sqlite+aiosqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webintel.db')}"
+        return "sqlite+aiosqlite:////tmp/tailorresume.db"
+    return f"sqlite+aiosqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tailorresume.db')}"
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", ".env.local", "../.env", "../.env.local"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
     )
 
     # App
-    APP_NAME: str = "WebIntel"
-    APP_VERSION: str = "1.0.0"
+    APP_NAME: str = "TailorResume"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = True
 
     # Server
@@ -51,6 +51,36 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
     CACHE_TTL_SECONDS: int = 3600  # 1 hour
 
+    # AI & Groq Configuration (Server-side only — Module 6 AI Provider)
+    # Model catalog: https://console.groq.com/docs/models
+    # Key management: https://console.groq.com/keys
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    AI_PROVIDER: str = "groq"
+    AI_REQUEST_TIMEOUT_SECONDS: int = 30
+    AI_MAX_RETRIES: int = 2
+
+    # Legacy / Alternative Tailoring Settings
+    TAILORING_LLM_PROVIDER: str = "groq"
+    TAILORING_LLM_MODEL: str = "llama-3.3-70b-versatile"
+    TAILORING_LLM_ENABLED: bool = True
+    HUGGINGFACE_API_KEY: Optional[str] = None
+    TAILORING_MAX_REWRITE_CANDIDATES: int = 3
+    TAILORING_REQUEST_TIMEOUT_SECONDS: int = 30
+
+    @property
+    def is_groq_configured(self) -> bool:
+        """Determines if a valid Groq API key is present on the server without logging the key."""
+        if not self.GROQ_API_KEY:
+            return False
+        val = self.GROQ_API_KEY.strip()
+        if not val or val.lower() in ("your_groq_api_key_here", "placeholder", "none", ""):
+            return False
+        if "your_groq" in val.lower():
+            return False
+        return len(val) >= 20
+
     # CORS — allow the Chrome extension & frontend domains
     CORS_ORIGINS: Union[str, List[str]] = [
         "chrome-extension://*",
@@ -58,20 +88,6 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "https://*.vercel.app",
     ]
-
-    # Crawl4AI
-    CRAWL_HEADLESS: bool = True
-    CRAWL_VIEWPORT_WIDTH: int = 1920
-    CRAWL_VIEWPORT_HEIGHT: int = 1080
-    CRAWL_MAX_CONCURRENT: int = 3
-    CRAWL_TIMEOUT_SECONDS: int = 30
-
-    # AI Summary (optional — set to enable)
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
-
-    # Rate Limiting
-    FREE_ANALYSES_PER_DAY: int = 50
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

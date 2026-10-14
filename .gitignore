@@ -77,3 +77,9 @@ htmlcov/
 .env.production
 *.pem
 *.key
+
+# ========================
+# Storage / Uploaded Resumes
+# ========================
+backend/storage/resumes/*
+!backend/storage/resumes/.gitkeep

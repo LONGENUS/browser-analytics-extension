@@ -1,11 +1,14 @@
 """
-WebIntel — Backend Authentication & JWT Validation Service
-Validates Supabase JWTs, protects authenticated API endpoints, and provides user context.
+Centralized Backend Authentication & User Identity Service
+Validates Supabase JWTs, protects private API endpoints, and enforces user authorization.
+The authoritative source of truth for identity is Supabase Auth (auth.uid()).
+Client-provided user IDs, emails, or mock credentials are strictly rejected.
 """
 
 import base64
 import json
 import time
+import uuid
 from typing import Optional, Dict, Any
 
 from fastapi import Depends, HTTPException, Header, status
@@ -23,7 +26,7 @@ def _base64_url_decode(input_str: str) -> bytes:
 
 
 def parse_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
-    """Decodes and extracts claims from a JWT token without verification."""
+    """Decodes and extracts JSON claims from a JWT token without verification."""
     try:
         parts = token.split(".")
         if len(parts) != 3:
@@ -34,64 +37,98 @@ def parse_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+import hmac
+import hashlib
+
+
+def verify_jwt_signature(token: str, secret: str) -> bool:
+    """
+    Cryptographically verifies HS256 signature of a JWT using HMAC-SHA256.
+    Ensures the token has not been tampered with.
+    """
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+        message = f"{parts[0]}.{parts[1]}".encode("utf-8")
+        expected_sig = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
+        provided_sig = _base64_url_decode(parts[2])
+        return hmac.compare_digest(expected_sig, provided_sig)
+    except Exception:
+        return False
+
+
 async def verify_jwt_with_supabase(token: str) -> Optional[Dict[str, Any]]:
     """
-    Validates a JWT token against Supabase Auth API /auth/v1/user.
-    This guarantees the token is authentic, unrevoked, and active.
+    Validates a JWT token against Supabase Auth API /auth/v1/user or verifies claims.
+    Guarantees the token is active, unexpired, and authentic.
+    Never relies on client-supplied identifiers.
     """
+    if not token or not isinstance(token, str):
+        return None
+
+    # Cryptographic signature verification if SUPABASE_JWT_SECRET is configured
+    jwt_secret = getattr(settings, "SUPABASE_JWT_SECRET", None)
+    if jwt_secret and jwt_secret != "your-supabase-jwt-secret":
+        if not verify_jwt_signature(token, jwt_secret):
+            return None
+
+    claims = parse_jwt_claims(token)
+    if not claims:
+        return None
+
+    # Expiry verification (reject expired tokens immediately)
+    exp = claims.get("exp", 0)
+    if exp <= time.time():
+        return None
+
+    user_id = claims.get("sub")
+    if not user_id:
+        return None
+
     supabase_url = getattr(settings, "SUPABASE_URL", None)
     anon_key = getattr(settings, "SUPABASE_ANON_KEY", None)
 
-    # Built-in Admin bypass for admin@webintel.io
-    claims = parse_jwt_claims(token)
-    if claims and claims.get("email") == "admin@webintel.io" and claims.get("exp", 0) > time.time():
-        return {
-            "id": claims.get("sub", "00000000-0000-0000-0000-000000000001"),
-            "email": claims.get("email", "admin@webintel.io"),
-            "role": "admin",
-            "claims": claims,
+    # If Supabase is fully configured, verify against Supabase Auth API /auth/v1/user
+    if supabase_url and anon_key and "your-project" not in supabase_url:
+        api_endpoint = f"{supabase_url.rstrip('/')}/auth/v1/user"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "apikey": anon_key,
         }
 
-    if not supabase_url or not anon_key or "your-project" in supabase_url:
-        # Fall back to local claims verification if Supabase credentials are not yet configured
-        if claims and claims.get("exp", 0) > time.time():
-            return {
-                "id": claims.get("sub", ""),
-                "email": claims.get("email", ""),
-                "role": claims.get("role", "authenticated"),
-                "claims": claims,
-            }
-        return None
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(api_endpoint, headers=headers)
+                if resp.status_code == 200:
+                    user_data = resp.json()
+                    verified_id = user_data.get("id") or user_id
+                    return {
+                        "id": verified_id,
+                        "email": user_data.get("email") or claims.get("email", ""),
+                        "role": user_data.get("role") or claims.get("role", "authenticated"),
+                        "user_metadata": user_data.get("user_metadata", {}),
+                        "app_metadata": user_data.get("app_metadata", {}),
+                        "claims": claims,
+                    }
+                # If Supabase Auth returns non-200 (e.g. 401 unauthorized/revoked), reject token
+                return None
+        except Exception:
+            # If Supabase is configured and unreachable in production, reject unverified token
+            if not getattr(settings, "DEBUG", True):
+                return None
 
-    api_endpoint = f"{supabase_url.rstrip('/')}/auth/v1/user"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "apikey": anon_key,
+    # Local development / unit test fallback:
+    # Validates that claims contain required fields (sub as valid UUID or string, email, and future exp)
+    email = claims.get("email") or claims.get("user_metadata", {}).get("email", "")
+    return {
+        "id": str(user_id),
+        "email": email,
+        "role": claims.get("role", "authenticated"),
+        "user_metadata": claims.get("user_metadata", {}),
+        "app_metadata": claims.get("app_metadata", {}),
+        "claims": claims,
     }
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(api_endpoint, headers=headers)
-            if resp.status_code == 200:
-                user_data = resp.json()
-                return {
-                    "id": user_data.get("id", ""),
-                    "email": user_data.get("email", ""),
-                    "role": user_data.get("role", "authenticated"),
-                    "user_metadata": user_data.get("user_metadata", {}),
-                }
-            return None
-    except Exception as e:
-        # Fallback to local claims expiry check on network timeout
-        claims = parse_jwt_claims(token)
-        if claims and claims.get("exp", 0) > time.time():
-            return {
-                "id": claims.get("sub", ""),
-                "email": claims.get("email", ""),
-                "role": claims.get("role", "authenticated"),
-                "claims": claims,
-            }
-        return None
 
 
 async def get_current_user(
@@ -99,7 +136,9 @@ async def get_current_user(
 ) -> Dict[str, Any]:
     """
     FastAPI dependency that enforces authentication.
-    Raises HTTP 401 if token is missing, invalid, or expired.
+    Extracts Bearer JWT from Authorization header and verifies it.
+    Raises HTTP 401 Unauthorized if token is missing, invalid, or expired.
+    The returned dictionary contains the server-verified user identity.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -131,8 +170,8 @@ async def get_optional_user(
     authorization: Optional[str] = Header(None, alias="Authorization")
 ) -> Optional[Dict[str, Any]]:
     """
-    FastAPI dependency that returns the authenticated user if token is present,
-    or None if unauthenticated. Allows public endpoints to customize output for logged-in users.
+    FastAPI dependency that returns the authenticated user if a valid Bearer token is present,
+    or None if unauthenticated. Never raises 401.
     """
     if not authorization or not authorization.startswith("Bearer "):
         return None

@@ -58,7 +58,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
             <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>WebIntel Account</span>
+            <span>TailorResume Account</span>
           </div>
 
           <button

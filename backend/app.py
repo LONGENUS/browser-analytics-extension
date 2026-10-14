@@ -1,5 +1,5 @@
 """
-WebIntel — Main FastAPI Application
+TailorResume — Main FastAPI Application
 Entry point for the backend API server.
 """
 
@@ -17,52 +17,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routes.analyze import router as analyze_router
-from routes.export import router as export_router
-from routes.history import router as history_router
-from routes.overview import router as overview_router
-from routes.products import router as products_router
-from routes.seo import router as seo_router
-from routes.tech import router as tech_router
-from routes.traffic import router as traffic_router
+from routes.auth import router as auth_router
+from routes.resumes import router as resumes_router
+from routes.resume_imports import router as resume_imports_router
+from routes.jobs import router as jobs_router
+from routes.job_matches import router as job_matches_router
+from routes.tailoring import router as tailoring_router
+from routes.resume_export import router as resume_export_router
+from routes.dashboard import router as dashboard_router
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Initializes crawler and database connections on startup with resilient fallbacks.
+    Initializes database connections on startup.
     """
-    # --- Startup ---
-    from services.crawler import CrawlService
     from models.database import init_db
 
-    # Initialize database tables
     try:
         await init_db()
     except Exception as e:
         print(f"[WARN] Database startup warning: {e}")
-
-    # Initialize the global crawler instance
-    try:
-        crawler_service = CrawlService()
-        await crawler_service.start()
-        app.state.crawler = crawler_service
-    except Exception as e:
-        print(f"[WARN] Crawler initial startup warning: {e}")
-        app.state.crawler = None
 
     print(f"[OK] {settings.APP_NAME} v{settings.APP_VERSION} started")
     print(f"[API] API running on http://{settings.HOST}:{settings.PORT}")
 
     yield
 
-    # --- Shutdown ---
-    if hasattr(app.state, "crawler") and app.state.crawler:
-        try:
-            await app.state.crawler.stop()
-        except Exception:
-            pass
     print(f"[STOP] {settings.APP_NAME} shut down")
 
 
@@ -70,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered website intelligence and analytics API",
+    description="Centralized API for Job Tailoring and Web Application",
     lifespan=lifespan,
 )
 
@@ -81,27 +64,37 @@ async def global_exception_handler(request: Request, exc: Exception):
     traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__}
+        content={"detail": "An internal server error occurred.", "type": type(exc).__name__}
     )
 
 # --- CORS Middleware ---
+# Restricts origins to Chrome extension IDs, local dev, and Vercel production domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for extension compatibility
+    allow_origin_regex=r"^(chrome-extension://.*|http://localhost(:\d+)?|http://127\.0\.0\.1(:\d+)?|https://.*\.vercel\.app)$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Resume-SHA256", "X-File-Type"],
 )
 
 # --- Include Routers ---
-app.include_router(analyze_router, tags=["Analysis"])
-app.include_router(overview_router, prefix="/overview", tags=["Overview"])
-app.include_router(products_router, prefix="/products", tags=["Products"])
-app.include_router(seo_router, prefix="/seo", tags=["SEO"])
-app.include_router(tech_router, prefix="/tech", tags=["Technology"])
-app.include_router(traffic_router, prefix="/traffic", tags=["Traffic"])
-app.include_router(export_router, prefix="/export", tags=["Export"])
-app.include_router(history_router, prefix="/history", tags=["History"])
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(auth_router, prefix="/user", tags=["User Profile"])
+app.include_router(resume_imports_router, prefix="/api/resumes/import", tags=["Resume Import"])
+app.include_router(resume_imports_router, prefix="/resumes/import", tags=["Resume Import"])
+app.include_router(tailoring_router, prefix="/api/resumes", tags=["Resume Tailoring"])
+app.include_router(tailoring_router, prefix="/resumes", tags=["Resume Tailoring"])
+app.include_router(resume_export_router, prefix="/api/resumes", tags=["Resume Export"])
+app.include_router(resume_export_router, prefix="/resumes", tags=["Resume Export"])
+app.include_router(resumes_router, prefix="/api/resumes", tags=["Resumes"])
+app.include_router(resumes_router, prefix="/resumes", tags=["Resumes"])
+app.include_router(jobs_router, prefix="/api/jobs", tags=["Jobs"])
+app.include_router(jobs_router, prefix="/jobs", tags=["Jobs"])
+app.include_router(job_matches_router, prefix="/api/jobs", tags=["Job Matches"])
+app.include_router(job_matches_router, prefix="/jobs", tags=["Job Matches"])
+app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
 
 
 # --- Root & Health Check ---

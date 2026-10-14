@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Loader2, ArrowRight, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, Loader2, ArrowRight, AlertCircle, CheckCircle2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 interface ForgotPasswordProps {
@@ -14,21 +14,24 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSendLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
-      setError('Please enter your email address.');
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
     setIsLoading(true);
     setError(null);
 
-    const res = await authService.resetPasswordForEmail(email);
+    const res = await authService.resetPasswordForEmail(cleanEmail);
     setIsLoading(false);
 
     if (res.success) {
@@ -74,8 +77,8 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({
           </h3>
           <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto">
             {isResetMode
-              ? 'Your password has been successfully reset. You can now sign in with your new credentials.'
-              : `We sent a secure password reset link to ${email}. Please check your inbox and spam folders.`}
+              ? 'Your password has been successfully updated. You can now sign in with your new credentials.'
+              : `If an account exists for that email, you will receive a password reset link.`}
           </p>
         </div>
         <button
@@ -117,13 +120,23 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({
             <div className="relative">
               <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                autoComplete="new-password"
+                className="w-full pl-8 pr-9 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                tabIndex={-1}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 
@@ -134,13 +147,23 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({
             <div className="relative">
               <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                autoComplete="new-password"
+                className="w-full pl-8 pr-9 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                tabIndex={-1}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </div>
 
@@ -166,6 +189,7 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
               />
             </div>

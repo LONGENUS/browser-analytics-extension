@@ -1,14 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "WebIntel — Website Intelligence Tool",
-  "version": "1.0.0",
-  "description": "AI-powered website analytics. Extract products, prices, SEO data and export to CSV/Excel in one click.",
+  "name": "TailorResume — AI Resume Tailoring Assistant",
+  "version": "2.0.0",
+  "description": "AI Resume Tailoring Assistant. Maintain structured resumes, import resumes, and tailor resumes for job applications.",
   "permissions": [
     "activeTab",
-    "scripting",
     "sidePanel",
     "storage",
-    "tabs"
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -20,7 +19,7 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "WebIntel — Website Intelligence",
+    "default_title": "TailorResume — AI Resume Tailor",
     "default_icon": {
       "16": "assets/icons/icon16.png",
       "48": "assets/icons/icon48.png",

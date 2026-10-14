@@ -1,8 +1,8 @@
 @echo off
-title WebIntel Backend Server
+title TailorResume Backend Server
 color 0A
 echo ===================================================
-echo   Starting WebIntel Backend Server (FastAPI + Crawl4AI)
+echo   Starting TailorResume Backend Server (FastAPI)
 echo   Local URL: http://localhost:8000
 echo   Docs:      http://localhost:8000/docs
 echo ===================================================

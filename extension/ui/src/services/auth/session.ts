@@ -1,5 +1,5 @@
 /**
- * WebIntel Auth Session Management
+ * TailorResume Auth Session Management
  * State definitions, event subscription, and session lifecycle.
  */
 

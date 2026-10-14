@@ -1,5 +1,5 @@
 /**
- * WebIntel JWT Utilities
+ * TailorResume JWT Utilities
  * Lightweight, safe JWT parser and expiry validator without external dependencies.
  */
 

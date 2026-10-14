@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   User,
   Mail,
@@ -6,10 +6,7 @@ import {
   Clock,
   LogOut,
   Sparkles,
-  Cloud,
   CheckCircle2,
-  Trash2,
-  ExternalLink,
   Loader2,
 } from 'lucide-react';
 import { authService, AuthUser } from '../../services/auth';
@@ -21,43 +18,13 @@ interface ProfileProps {
 }
 
 export const Profile: React.FC<ProfileProps> = ({ user, onSignOut, onClose }) => {
-  const [analyses, setAnalyses] = useState<any[]>([]);
-  const [isLoadingAnalyses, setIsLoadingAnalyses] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadAnalyses = async () => {
-      setIsLoadingAnalyses(true);
-      try {
-        const list = await authService.getSavedAnalyses();
-        if (isMounted) {
-          setAnalyses(list);
-        }
-      } catch (_) {}
-      if (isMounted) {
-        setIsLoadingAnalyses(false);
-      }
-    };
-    loadAnalyses();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
     await authService.signOut();
     setIsSigningOut(false);
     onSignOut();
-  };
-
-  const handleDeleteAnalysis = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const ok = await authService.deleteSavedAnalysis(id);
-    if (ok) {
-      setAnalyses((prev) => prev.filter((a) => a.id !== id));
-    }
   };
 
   const initials = (user.fullName || user.email || 'U')
@@ -126,57 +93,28 @@ export const Profile: React.FC<ProfileProps> = ({ user, onSignOut, onClose }) =>
         </div>
       </div>
 
-      {/* Cloud Sync & Saved Analyses Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white px-0.5">
-          <span className="flex items-center gap-1.5">
-            <Cloud className="w-3.5 h-3.5 text-blue-600" />
-            Saved Cloud Analyses ({analyses.length})
+      {/* Account Status Card */}
+      <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5 text-blue-600" />
+            Authentication
           </span>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-normal">
-            <CheckCircle2 className="w-3 h-3" />
-            Auto-Sync Active
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Supabase Auth Verified
           </span>
         </div>
 
-        {isLoadingAnalyses ? (
-          <div className="p-6 text-center text-xs text-slate-400">
-            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1 text-blue-600" />
-            Loading cloud history...
-          </div>
-        ) : analyses.length === 0 ? (
-          <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
-            No analyses saved to your cloud account yet. Completed page scans are synced automatically.
-          </div>
-        ) : (
-          <div className="max-h-48 overflow-y-auto space-y-1.5 no-scrollbar pr-0.5">
-            {analyses.slice(0, 10).map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/40 text-xs transition-colors"
-              >
-                <div className="min-w-0 pr-2">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                    {a.domain || 'Website'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
-                    {a.url}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={(e) => handleDeleteAnalysis(a.id, e)}
-                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                    title="Delete saved analysis"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            Resume Platform
+          </span>
+          <span className="text-slate-700 dark:text-slate-300 font-medium">
+            Active Workspace
+          </span>
+        </div>
       </div>
 
       {/* Action Buttons */}

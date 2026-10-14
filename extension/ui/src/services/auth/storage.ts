@@ -1,5 +1,5 @@
 /**
- * WebIntel Auth Storage Adapter
+ * TailorResume Auth Storage Adapter
  * Provides persistent, secure token & session storage across browser restarts.
  * Uses chrome.storage.local in Chrome Extension context with web localStorage fallback.
  */
@@ -133,10 +133,10 @@ export const authStorage = new ChromeStorageAdapter();
  * Storage keys used by the authentication module.
  */
 export const AUTH_STORAGE_KEYS = {
-  SESSION: 'webintel_auth_session',
-  USER: 'webintel_auth_user',
-  TOKEN: 'webintel_auth_token',
-  REFRESH_TOKEN: 'webintel_auth_refresh_token',
-  EXPIRES_AT: 'webintel_auth_expires_at',
-  LAST_ANALYSIS: 'webintel_pending_save_analysis',
+  SESSION: 'tailorresume_auth_session',
+  USER: 'tailorresume_auth_user',
+  TOKEN: 'tailorresume_auth_token',
+  REFRESH_TOKEN: 'tailorresume_auth_refresh_token',
+  EXPIRES_AT: 'tailorresume_auth_expires_at',
+  LAST_ANALYSIS: 'tailorresume_pending_save_analysis',
 } as const;

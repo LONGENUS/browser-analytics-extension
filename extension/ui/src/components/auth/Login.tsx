@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Loader2, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, Loader2, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 interface LoginProps {
@@ -15,13 +15,15 @@ export const Login: React.FC<LoginProps> = ({
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       setError('Please enter both email and password.');
       return;
     }
@@ -29,29 +31,13 @@ export const Login: React.FC<LoginProps> = ({
     setIsLoading(true);
     setError(null);
 
-    const res = await authService.signInWithPassword(email, password);
+    const res = await authService.signInWithPassword(cleanEmail, password);
     setIsLoading(false);
 
     if (res.success) {
       onSuccess();
     } else {
-      setError(res.error || 'Failed to sign in. Please verify your credentials.');
-    }
-  };
-
-  const handleQuickAdminLogin = async () => {
-    setEmail('admin@webintel.io');
-    setPassword('admin123456');
-    setIsLoading(true);
-    setError(null);
-
-    const res = await authService.signInWithPassword('admin@webintel.io', 'admin123456');
-    setIsLoading(false);
-
-    if (res.success) {
-      onSuccess();
-    } else {
-      setError(res.error || 'Admin login failed.');
+      setError(res.error || 'Incorrect email or password.');
     }
   };
 
@@ -76,7 +62,7 @@ export const Login: React.FC<LoginProps> = ({
           Welcome back
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Sign in to sync analyses and access cloud intelligence
+          Sign in to your account to sync and manage your application data
         </p>
       </div>
 
@@ -86,45 +72,6 @@ export const Login: React.FC<LoginProps> = ({
           <span>{error}</span>
         </div>
       )}
-
-      {/* Quick Admin Demo Login Card */}
-      <div className="p-3 rounded-xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">
-              Admin & Pro Access
-            </span>
-          </div>
-          <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 uppercase tracking-wide">
-            PRO PLAN
-          </span>
-        </div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-          <div className="flex justify-between items-center text-[10px] font-mono bg-white/70 dark:bg-slate-900/70 p-1.5 rounded border border-slate-200/60 dark:border-slate-800/60">
-            <span>Email: <strong className="text-slate-700 dark:text-slate-200">admin@webintel.io</strong></span>
-            <span>Pass: <strong className="text-slate-700 dark:text-slate-200">admin123456</strong></span>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleQuickAdminLogin}
-          disabled={isLoading || isGoogleLoading}
-          className="w-full py-1.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
-        >
-          {isLoading && email === 'admin@webintel.io' ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <>
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
-              <span>1-Click Admin Login</span>
-            </>
-          )}
-        </button>
-      </div>
 
       {/* Google OAuth Button */}
       <button
@@ -165,6 +112,17 @@ export const Login: React.FC<LoginProps> = ({
         </span>
       </div>
 
+      <button
+        type="button"
+        onClick={() => {
+          setEmail('alex.johnson@gmail.com');
+          setPassword('password123');
+        }}
+        className="w-full py-1.5 px-3 rounded-lg border border-dashed border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-[11px] font-medium hover:bg-blue-100/50 transition-colors"
+      >
+        Fill Demo Account (alex.johnson@gmail.com)
+      </button>
+
       {/* Email + Password Form */}
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
@@ -179,6 +137,7 @@ export const Login: React.FC<LoginProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
           </div>
@@ -200,13 +159,23 @@ export const Login: React.FC<LoginProps> = ({
           <div className="relative">
             <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+              autoComplete="current-password"
+              className="w-full pl-8 pr-9 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              tabIndex={-1}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
           </div>
         </div>
 
