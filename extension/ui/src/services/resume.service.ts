@@ -94,10 +94,79 @@ class ResumeService {
     } catch (_) {}
 
     const local = await getLocalResumes();
-    const found = local.find((r) => r.id === resumeId);
+    const found = local.find((r) => r.id === resumeId || r.id === `draft-${resumeId}` || r.id.replace('draft-', '') === resumeId);
     if (found) return found;
 
     throw new Error('This resume could not be found.');
+  }
+
+  /**
+   * Ensures that a resume selected for matching or tailoring is fully persisted in the backend.
+   * If it's a draft from local storage (starts with 'draft-'), automatically creates and updates
+   * the canonical backend record and updates the local cache.
+   */
+  async ensureResumeSavedOnBackend(resumeId: string): Promise<string> {
+    if (!resumeId) return resumeId;
+    const cleanId = resumeId.replace(/^draft-/, '');
+
+    // 1. If it has a draft- prefix or only exists locally
+    if (resumeId.startsWith('draft-')) {
+      try {
+        const local = await this.getResume(resumeId).catch(() => null);
+        if (local) {
+          // Check if already in backend by name or sha
+          const remoteList = await this.listResumes();
+          const match = remoteList.find(
+            (r) => !r.id.startsWith('draft-') && (r.id === cleanId || r.name === local.name || (local.file_sha256 && r.file_sha256 === local.file_sha256))
+          );
+          if (match) {
+            return match.id;
+          }
+
+          // Otherwise, create on backend
+          const created = await this.createResume({
+            name: local.name || 'Master Resume',
+            is_default: local.is_default || remoteList.length === 0,
+            file_sha256: local.file_sha256,
+            original_filename: local.original_filename,
+            original_file_path: local.original_file_path,
+            file_type: local.file_type,
+            file_size: local.file_size,
+          });
+
+          const updated = await this.updateResume(created.id, {
+            name: local.name || 'Master Resume',
+            is_default: local.is_default || remoteList.length === 0,
+            status: 'ready',
+            file_sha256: local.file_sha256,
+            original_filename: local.original_filename,
+            original_file_path: local.original_file_path,
+            file_type: local.file_type,
+            file_size: local.file_size,
+            personal_info: local.personal_info,
+            summary: local.summary,
+            experiences: local.experiences,
+            educations: local.educations,
+            skills: local.skills,
+            projects: local.projects,
+            certifications: local.certifications,
+            links: local.links,
+          });
+
+          // Replace in local storage
+          const cached = await getLocalResumes();
+          const filtered = cached.filter((r) => r.id !== resumeId && r.id !== updated.id);
+          await saveLocalResumes([updated, ...filtered]);
+
+          return updated.id;
+        }
+      } catch (err) {
+        console.warn('Auto-persisting draft resume failed, using cleanId fallback:', err);
+      }
+      return cleanId;
+    }
+
+    return cleanId;
   }
 
   /**

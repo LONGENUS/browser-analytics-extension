@@ -132,8 +132,8 @@ export const JobTailorFlow: React.FC<JobTailorFlowProps> = ({
 
       // Pre-select default or first master resume
       const defaultRes = sorted.find((r) => r.is_default) || sorted.find((r) => !r.is_tailored) || sorted[0];
-      if (defaultRes && !selectedResumeId) {
-        setSelectedResumeId(defaultRes.id);
+      if (defaultRes && (!selectedResumeId || selectedResumeId.startsWith('draft-'))) {
+        setSelectedResumeId(defaultRes.id.replace(/^draft-/, ''));
       }
     } catch (err: any) {
       console.warn('Could not load user resumes:', err);
@@ -230,7 +230,11 @@ export const JobTailorFlow: React.FC<JobTailorFlowProps> = ({
     setIsAnalyzingMatch(true);
     try {
       const currentJob = await ensureJobSaved();
-      const match = await matchingService.analyzeJobMatch(currentJob.id, selectedResumeId, false);
+      const realResumeId = await resumeService.ensureResumeSavedOnBackend(selectedResumeId);
+      if (realResumeId !== selectedResumeId) {
+        setSelectedResumeId(realResumeId);
+      }
+      const match = await matchingService.analyzeJobMatch(currentJob.id, realResumeId, false);
       setMatchResult(match);
       showToast('success', `Job Match calculated: ${match.overall_score}%`);
     } catch (err: any) {
@@ -255,9 +259,13 @@ export const JobTailorFlow: React.FC<JobTailorFlowProps> = ({
     setTailorStep('Ingesting job keywords & master resume...');
     try {
       const currentJob = await ensureJobSaved();
+      const realResumeId = await resumeService.ensureResumeSavedOnBackend(selectedResumeId);
+      if (realResumeId !== selectedResumeId) {
+        setSelectedResumeId(realResumeId);
+      }
 
       setTailorStep('Generating grounded bullet enhancements...');
-      const draft = await tailoringService.generateTailoredDraft(selectedResumeId, {
+      const draft = await tailoringService.generateTailoredDraft(realResumeId, {
         job_id: currentJob.id,
         tailoring_mode: tailoringMode,
         prioritize_skills: true,
@@ -273,7 +281,7 @@ export const JobTailorFlow: React.FC<JobTailorFlowProps> = ({
       // Auto-save the tailored resume
       setTailorStep('Saving tailored resume draft...');
       const defaultTailoredName = `${jobTitle} — ${companyName || 'Target Job'} (Tailored)`;
-      const saveResp = await tailoringService.saveTailoredResume(selectedResumeId, {
+      const saveResp = await tailoringService.saveTailoredResume(realResumeId, {
         job_id: currentJob.id,
         name: defaultTailoredName,
         tailored_resume: draft.tailored_resume,
@@ -619,11 +627,14 @@ export const JobTailorFlow: React.FC<JobTailorFlowProps> = ({
                   }}
                   className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  {resumes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} {r.is_default ? '★ (Default)' : ''} {r.is_tailored ? '— [Tailored]' : '— [Master]'}
-                    </option>
-                  ))}
+                  {resumes.map((r) => {
+                    const cleanVal = r.id.replace(/^draft-/, '');
+                    return (
+                      <option key={r.id} value={cleanVal}>
+                        {r.name} {r.is_default ? '★ (Default)' : ''} {r.is_tailored ? '— [Tailored]' : '— [Master]'}
+                      </option>
+                    );
+                  })}
                 </select>
 
                 <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">

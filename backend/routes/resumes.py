@@ -281,10 +281,39 @@ async def get_resume_by_id(
     Strictly verifies ownership: user_id == current_user['id'].
     """
     user_id = current_user["id"]
+    clean_id = resume_id.replace("draft-", "") if resume_id else resume_id
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+        select(Resume).where(
+            (Resume.id == resume_id) | (Resume.id == clean_id),
+            Resume.user_id == user_id,
+        )
     )
     resume = result.scalar_one_or_none()
+
+    if not resume:
+        # Fallback 1: check resume_imports table
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == resume_id) | (ResumeImport.id == clean_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            resume = existing_by_sha.scalars().first()
+
+    if not resume:
+        # Fallback 2: check default master resume
+        default_stmt = select(Resume).where(
+            Resume.user_id == user_id,
+            Resume.is_default == True,
+            Resume.is_tailored == False,
+        )
+        resume = (await db.execute(default_stmt)).scalars().first()
 
     if not resume:
         raise HTTPException(

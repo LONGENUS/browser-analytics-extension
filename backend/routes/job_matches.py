@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.database import get_db, Job, Resume, JobMatch
+from models.database import get_db, Job, Resume, JobMatch, ResumeImport
 from services.auth import get_current_user
 from services.matching_engine import (
     run_job_match_analysis,
@@ -97,9 +97,49 @@ async def analyze_job_match(
         )
 
     # 2. Verify Resume Ownership
-    resume_stmt = select(Resume).where(Resume.id == payload.resume_id, Resume.user_id == user_id)
+    clean_resume_id = payload.resume_id.replace("draft-", "") if payload.resume_id else payload.resume_id
+    is_draft = bool(payload.resume_id and payload.resume_id.startswith("draft-"))
+
+    resume_stmt = select(Resume).where(
+        (Resume.id == payload.resume_id) | (Resume.id == clean_resume_id),
+        Resume.user_id == user_id,
+    )
     resume_res = await db.execute(resume_stmt)
     resume = resume_res.scalars().first()
+
+    if not resume and is_draft:
+        # Fallback 1: Check resume_imports table
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == payload.resume_id) | (ResumeImport.id == clean_resume_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            resume = existing_by_sha.scalars().first()
+
+        # Fallback 2: Check user's default master resume
+        if not resume:
+            default_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_default == True,
+                Resume.is_tailored == False,
+            )
+            resume = (await db.execute(default_stmt)).scalars().first()
+
+        # Fallback 3: Check any master resume for this user
+        if not resume:
+            any_master_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_tailored == False,
+            ).order_by(Resume.created_at.desc())
+            resume = (await db.execute(any_master_stmt)).scalars().first()
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

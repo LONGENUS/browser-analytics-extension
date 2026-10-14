@@ -36,6 +36,7 @@ from models.database import (
     ResumeLink,
     Job,
     TailoredResume,
+    ResumeImport,
 )
 from services.auth import get_current_user
 from services.matching_engine import run_job_match_analysis
@@ -140,8 +141,47 @@ async def generate_tailored_draft(
     tailor_rate_limiter.check(request, user_id=user_id)
 
     # 1. Verify Source Resume Ownership
-    res_stmt = select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    clean_id = resume_id.replace("draft-", "") if resume_id else resume_id
+    is_draft = bool(resume_id and resume_id.startswith("draft-"))
+    res_stmt = select(Resume).where(
+        (Resume.id == resume_id) | (Resume.id == clean_id),
+        Resume.user_id == user_id,
+    )
     source_resume = (await db.execute(res_stmt)).scalars().first()
+
+    if not source_resume and is_draft:
+        # Fallback 1: Check resume_imports table
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == resume_id) | (ResumeImport.id == clean_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            source_resume = existing_by_sha.scalars().first()
+
+        # Fallback 2: Check user's default master resume
+        if not source_resume:
+            default_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_default == True,
+                Resume.is_tailored == False,
+            )
+            source_resume = (await db.execute(default_stmt)).scalars().first()
+
+        # Fallback 3: Check any master resume for this user
+        if not source_resume:
+            any_master_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_tailored == False,
+            ).order_by(Resume.created_at.desc())
+            source_resume = (await db.execute(any_master_stmt)).scalars().first()
+
     if not source_resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -222,8 +262,47 @@ async def save_tailored_resume(
     tailor_rate_limiter.check(request, user_id=user_id)
 
     # 1. Verify Source Resume Ownership
-    res_stmt = select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    clean_id = resume_id.replace("draft-", "") if resume_id else resume_id
+    is_draft = bool(resume_id and resume_id.startswith("draft-"))
+    res_stmt = select(Resume).where(
+        (Resume.id == resume_id) | (Resume.id == clean_id),
+        Resume.user_id == user_id,
+    )
     source_resume = (await db.execute(res_stmt)).scalars().first()
+
+    if not source_resume and is_draft:
+        # Fallback 1: Check resume_imports table
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == resume_id) | (ResumeImport.id == clean_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            source_resume = existing_by_sha.scalars().first()
+
+        # Fallback 2: Check user's default master resume
+        if not source_resume:
+            default_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_default == True,
+                Resume.is_tailored == False,
+            )
+            source_resume = (await db.execute(default_stmt)).scalars().first()
+
+        # Fallback 3: Check any master resume for this user
+        if not source_resume:
+            any_master_stmt = select(Resume).where(
+                Resume.user_id == user_id,
+                Resume.is_tailored == False,
+            ).order_by(Resume.created_at.desc())
+            source_resume = (await db.execute(any_master_stmt)).scalars().first()
+
     if not source_resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
