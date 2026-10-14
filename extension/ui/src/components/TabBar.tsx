@@ -9,56 +9,35 @@ import {
   User,
 } from 'lucide-react';
 
-export type TabKey = 'dashboard' | 'resumes' | 'tailored' | 'jobs' | 'tailor' | 'profile';
+export type TabKey = 'profile' | 'ats_score' | 'resumes';
 
 interface TabBarProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   masterCount?: number;
-  tailoredCount?: number;
-  jobCount?: number;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
   activeTab,
   onTabChange,
   masterCount,
-  tailoredCount,
-  jobCount,
 }) => {
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; badge?: number }[] = [
-    {
-      key: 'dashboard',
-      label: 'Overview',
-      icon: <LayoutDashboard className="w-3.5 h-3.5" />,
-    },
-    {
-      key: 'resumes',
-      label: 'My Resumes',
-      icon: <FileText className="w-3.5 h-3.5" />,
-      badge: masterCount,
-    },
-    {
-      key: 'tailored',
-      label: 'Tailored',
-      icon: <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />,
-      badge: tailoredCount,
-    },
-    {
-      key: 'jobs',
-      label: 'Saved Jobs',
-      icon: <Briefcase className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />,
-      badge: jobCount,
-    },
-    {
-      key: 'tailor',
-      label: 'Tailor Job',
-      icon: <Wand2 className="w-3.5 h-3.5 text-purple-500" />,
-    },
     {
       key: 'profile',
       label: 'Profile',
       icon: <User className="w-3.5 h-3.5" />,
+    },
+    {
+      key: 'ats_score',
+      label: 'ATS Score',
+      icon: <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />,
+    },
+    {
+      key: 'resumes',
+      label: 'Resumes',
+      icon: <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />,
+      badge: masterCount,
     },
   ];
 

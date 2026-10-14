@@ -92,6 +92,45 @@ export class TailoringService {
     }
     return resp.json();
   }
+
+  /**
+   * Directly generates and persists a tailored resume from master resume and job description.
+   */
+  async directTailorResume(
+    resumeId: string,
+    jobId: string,
+    name?: string
+  ): Promise<{
+    status: string;
+    message: string;
+    tailored_resume_id: string;
+    name: string;
+    source_resume_id: string;
+    source_resume_name: string;
+    target_job_id: string;
+    target_job_title: string;
+    target_company_name: string;
+    preview_url: string;
+    download_pdf_url: string;
+    download_docx_url: string;
+    created_at: string;
+  }> {
+    const resp = await authenticatedFetch('/api/tailoring/direct-tailor', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_id: jobId,
+        name: name,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Direct tailoring failed (${resp.status})`);
+    }
+
+    return resp.json();
+  }
 }
 
 export const tailoringService = new TailoringService();

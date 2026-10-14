@@ -39,6 +39,13 @@ class MatchRequestSchema(BaseModel):
     force_recalculate: bool = Field(False, description="Force re-running matching engine")
 
 
+class ATSCalculateRequestSchema(BaseModel):
+    resume_id: str = Field(..., description="UUID of the master resume")
+    job_description: str = Field(..., description="Pasted job description")
+    job_title: Optional[str] = Field(None, description="Optional job title")
+    company_name: Optional[str] = Field(None, description="Optional company name")
+
+
 class MatchSummarySchema(BaseModel):
     id: str
     job_id: str
@@ -249,6 +256,190 @@ async def analyze_job_match(
         "cached": False,
         "created_at": now_utc.isoformat(),
         **analysis,
+    }
+
+
+@router.post("/calculate-ats-score")
+async def calculate_ats_score(
+    payload: ATSCalculateRequestSchema,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Primary ATS Scoring Endpoint:
+    Accepts manually entered job description text and selected master resume UUID.
+    Validates non-empty input, validates master resume authenticity and parsed content.
+    Calculates deterministic ATS score and extracts concise missing requirements.
+    Persists analysis and job description for future retrieval.
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user identity required."
+        )
+
+    match_rate_limiter.check(request, user_id=user_id)
+
+    # 1. Validate Job Description
+    clean_desc = (payload.job_description or "").strip()
+    if len(clean_desc) < 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a complete job description before calculating the ATS score."
+        )
+
+    # 2. Validate Selected Master Resume
+    clean_resume_id = payload.resume_id.replace("draft-", "")
+    resume_stmt = select(Resume).where(
+        (Resume.id == payload.resume_id) | (Resume.id == clean_resume_id),
+        Resume.user_id == user_id,
+    )
+    resume = (await db.execute(resume_stmt)).scalars().first()
+
+    if not resume:
+        # Fallback to resume_imports
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == payload.resume_id) | (ResumeImport.id == clean_resume_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            resume = existing_by_sha.scalars().first()
+
+    if not resume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Selected master resume was not found or access was denied."
+        )
+
+    # Never analyze previous tailored resume as a master resume
+    if resume.is_tailored:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected document is a tailored resume. Please select an original master resume for ATS analysis."
+        )
+
+    # 3. Retrieve Extracted Content
+    resume_dict = resume.to_full_dict()
+    has_content = bool(
+        resume_dict.get("experiences")
+        or resume_dict.get("skills")
+        or resume_dict.get("educations")
+        or (resume_dict.get("summary") and str(resume_dict.get("summary")).strip())
+    )
+    if not has_content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The selected master resume could not be parsed or contains no readable text content. Please upload a valid document."
+        )
+
+    # 4. Save or Update Job Record
+    title = (payload.job_title or "").strip()
+    if not title:
+        first_line = clean_desc.splitlines()[0].strip()
+        title = first_line[:80] if len(first_line) > 3 else "Target Position"
+    company = (payload.company_name or "Target Company").strip()
+
+    now_utc = datetime.now(timezone.utc)
+    job = Job(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        job_title=title,
+        company_name=company,
+        job_description=clean_desc,
+        source="manual",
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(job)
+    await db.flush()
+
+    # 5. Execute Job Match Analysis
+    job_dict = job.to_dict()
+    analysis = run_job_match_analysis(job_dict, resume_dict)
+
+    # 6. Extract Concise List of Missing or Insufficiently Evidenced Requirements
+    missing_requirements: List[str] = []
+
+    # A. Missing skills (Required first, then Preferred)
+    for ms in analysis.get("missing_skills", []):
+        sk_name = ms.get("canonical") or ms.get("name") or str(ms)
+        importance = ms.get("importance", "required")
+        if importance == "required":
+            missing_requirements.append(f"{sk_name} (Required skill not found in resume)")
+        else:
+            missing_requirements.append(f"{sk_name} (Preferred skill not found in resume)")
+
+    # B. Missing or partial responsibilities
+    for resp in analysis.get("responsibilities_analysis", []):
+        if resp.get("status") == "missing":
+            r_text = resp.get("job_responsibility", "")
+            if len(r_text) > 100:
+                r_text = r_text[:97] + "..."
+            missing_requirements.append(f"Responsibility missing: \"{r_text}\"")
+        elif resp.get("status") == "partial":
+            r_text = resp.get("job_responsibility", "")
+            if len(r_text) > 100:
+                r_text = r_text[:97] + "..."
+            missing_requirements.append(f"Responsibility partially evidenced: \"{r_text}\"")
+
+    # C. Experience duration gap
+    exp_assess = analysis.get("experience_assessment", {})
+    if exp_assess.get("status") == "partial":
+        req_yrs = exp_assess.get("required_years")
+        cand_yrs = exp_assess.get("candidate_years")
+        if req_yrs and cand_yrs is not None:
+            missing_requirements.append(f"Experience: Requires {req_yrs}+ years (resume shows ~{cand_yrs} years)")
+        elif exp_assess.get("message"):
+            missing_requirements.append(f"Experience: {exp_assess.get('message')}")
+
+    # D. Qualifications gap
+    qual_assess = analysis.get("qualification_assessment", {})
+    if qual_assess.get("education_status") == "missing":
+        req_deg = qual_assess.get("required_degree") or "Degree"
+        missing_requirements.append(f"Education: {req_deg} requested in job posting but not found in resume")
+
+    # 7. Persist JobMatch Record
+    new_match = JobMatch(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        job_id=job.id,
+        resume_id=resume.id,
+        overall_score=analysis.get("overall_score", 0),
+        category_scores=analysis.get("category_scores", {}),
+        matched_skills=analysis.get("matched_skills", []),
+        missing_skills=analysis.get("missing_skills", []),
+        responsibilities_analysis=analysis.get("responsibilities_analysis", []),
+        experience_assessment=analysis.get("experience_assessment", {}),
+        qualification_assessment=analysis.get("qualification_assessment", {}),
+        keyword_coverage=analysis.get("keyword_coverage", {}),
+        evidence=analysis.get("evidence", []),
+        algorithm_version=ALGORITHM_VERSION,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(new_match)
+    await db.commit()
+
+    return {
+        "match_id": new_match.id,
+        "job_id": job.id,
+        "job_title": job.job_title,
+        "company_name": job.company_name,
+        "job_description": job.job_description,
+        "resume_id": resume.id,
+        "resume_name": resume.name,
+        "overall_score": analysis.get("overall_score", 0),
+        "missing_requirements": missing_requirements,
+        "created_at": now_utc.isoformat(),
     }
 
 

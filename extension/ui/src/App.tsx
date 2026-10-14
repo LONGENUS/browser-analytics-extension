@@ -3,11 +3,8 @@ import { AlertTriangle, User } from 'lucide-react';
 import { Header } from './components/Header';
 import { TabBar, TabKey } from './components/TabBar';
 import { AuthModal, AuthModalView } from './components/auth/AuthModal';
-import { DashboardOverview } from './components/dashboard/DashboardOverview';
-import { TailoredResumesList } from './components/dashboard/TailoredResumesList';
+import { ATSScoreWorkspace } from './components/ats/ATSScoreWorkspace';
 import { ResumeDashboard } from './components/resume/ResumeDashboard';
-import { JobsDashboard } from './components/jobs/JobsDashboard';
-import { JobTailorFlow } from './components/extension/JobTailorFlow';
 import { Profile } from './components/auth/Profile';
 import { authService, sessionManager, AuthState, AuthUser } from './services/auth';
 import { dashboardService } from './services/dashboard.service';
@@ -30,15 +27,17 @@ export const App: React.FC = () => {
   const [authModalView, setAuthModalView] = useState<AuthModalView>('login');
   const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
 
-  // Active Tab navigation ('dashboard' | 'resumes' | 'tailored' | 'jobs' | 'tailor' | 'profile')
-  const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
+  // Active Tab navigation — Exactly three tabs: 'profile' | 'ats_score' | 'resumes'
+  // ATS Score is the primary workspace
+  const [activeTab, setActiveTab] = useState<TabKey>('ats_score');
 
-  // Badge counts
+  // Badge count for master resumes
   const [masterCount, setMasterCount] = useState<number | undefined>(undefined);
-  const [tailoredCount, setTailoredCount] = useState<number | undefined>(undefined);
-  const [jobCount, setJobCount] = useState<number | undefined>(undefined);
 
-  // Cross-tab actions triggered from Dashboard Overview
+  // Cross-tab resume selection for ATS Score
+  const [selectedMasterResumeId, setSelectedMasterResumeId] = useState<string | null>(null);
+
+  // Cross-tab actions for Resumes tab
   const [resumeAction, setResumeAction] = useState<'create' | 'import' | null>(null);
   const [targetResumeIdToEdit, setTargetResumeIdToEdit] = useState<string | null>(null);
   const [targetResumeIdToPreview, setTargetResumeIdToPreview] = useState<string | null>(null);
@@ -71,8 +70,6 @@ export const App: React.FC = () => {
         .getOverview()
         .then((res) => {
           setMasterCount(res.counts.master_resumes);
-          setTailoredCount(res.counts.tailored_resumes);
-          setJobCount(res.counts.saved_jobs);
         })
         .catch(() => {
           // Non-blocking error for badges
@@ -98,7 +95,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex justify-center">
-      {/* Responsive App Shell: Compact inside side panel (400-480px) and expanded on desktop (up to 1152px) */}
+      {/* Responsive App Shell: 3-tab simplified workflow */}
       <div className="w-full sm:max-w-6xl min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col border-x border-slate-200/80 dark:border-slate-800 shadow-2xl relative">
         {/* Sticky Header */}
         <Header
@@ -126,94 +123,27 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* Sticky Navigation Tab Bar */}
+        {/* Exactly Three Tabs: Profile, ATS Score, Resumes */}
         <TabBar
           activeTab={activeTab}
           onTabChange={(tab) => {
-            // Reset any one-shot cross-navigation triggers when user clicks a tab
             setResumeAction(null);
             setTargetResumeIdToEdit(null);
             setTargetResumeIdToPreview(null);
             setActiveTab(tab);
           }}
           masterCount={masterCount}
-          tailoredCount={tailoredCount}
-          jobCount={jobCount}
         />
 
-        {/* Main Content Area */}
+        {/* Main Workspace Area */}
         <main className="flex-1 p-3 sm:p-5 overflow-y-auto">
-          {/* 1. Dashboard Overview Tab */}
-          {activeTab === 'dashboard' && (
-            <DashboardOverview
-              onNavigateTab={(tab) => {
-                setResumeAction(null);
-                setTargetResumeIdToEdit(null);
-                setTargetResumeIdToPreview(null);
-                setActiveTab(tab);
-              }}
-              onOpenCreateResume={() => {
-                setResumeAction('create');
-                setActiveTab('resumes');
-              }}
-              onOpenImportResume={() => {
-                setResumeAction('import');
-                setActiveTab('resumes');
-              }}
-              onOpenResumeEdit={(id) => {
-                setTargetResumeIdToEdit(id);
-                setActiveTab('resumes');
-              }}
-              onOpenResumePreview={(id) => {
-                setTargetResumeIdToPreview(id);
-                setActiveTab('resumes');
-              }}
-              authState={authState}
-              onOpenAuth={handleOpenAuth}
-            />
-          )}
-
-          {/* 2. Master Resumes Tab */}
-          {activeTab === 'resumes' && (
-            <ResumeDashboard
-              initialOpenCreate={resumeAction === 'create'}
-              initialOpenImport={resumeAction === 'import'}
-              initialResumeIdToEdit={targetResumeIdToEdit}
-              initialResumeIdToPreview={targetResumeIdToPreview}
-              authState={authState}
-              onOpenAuth={handleOpenAuth}
-            />
-          )}
-
-          {/* 3. Tailored Resumes History Tab */}
-          {activeTab === 'tailored' && (
-            <TailoredResumesList
-              onNavigateToJobs={() => setActiveTab('jobs')}
-              onNavigateToTailor={() => setActiveTab('tailor')}
-            />
-          )}
-
-          {/* 4. Saved Jobs Tab */}
-          {activeTab === 'jobs' && (
-            <JobsDashboard />
-          )}
-
-          {/* 5. Extension Tailoring Flow Tab */}
-          {activeTab === 'tailor' && (
-            <JobTailorFlow
-              currentUser={currentUser}
-              onOpenAuth={handleOpenAuth}
-              onNavigateToResumes={() => setActiveTab('resumes')}
-            />
-          )}
-
-          {/* 6. Profile / Account Settings Tab */}
+          {/* Tab 1: Profile */}
           {activeTab === 'profile' && (
             <div className="py-2 max-w-md mx-auto">
               {currentUser ? (
                 <Profile
                   user={currentUser}
-                  onSignOut={() => setActiveTab('dashboard')}
+                  onSignOut={() => setActiveTab('ats_score')}
                 />
               ) : (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800 text-center space-y-3 shadow-2xs">
@@ -224,17 +154,43 @@ export const App: React.FC = () => {
                     Sign in to view your profile
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
-                    Manage your account details and master resumes across devices.
+                    Manage your personal information, credentials, and account settings.
                   </p>
                   <button
                     onClick={() => handleOpenAuth('login')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-soft transition-all"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-soft transition-all cursor-pointer"
                   >
                     Sign In
                   </button>
                 </div>
               )}
             </div>
+          )}
+
+          {/* Tab 2: ATS Score (Primary Workspace) */}
+          {activeTab === 'ats_score' && (
+            <ATSScoreWorkspace
+              currentUser={currentUser}
+              onOpenAuth={handleOpenAuth}
+              onNavigateToResumes={() => setActiveTab('resumes')}
+              initialMasterResumeId={selectedMasterResumeId}
+            />
+          )}
+
+          {/* Tab 3: Resumes (Document Library: Master Resumes & Tailored Resumes) */}
+          {activeTab === 'resumes' && (
+            <ResumeDashboard
+              initialOpenCreate={resumeAction === 'create'}
+              initialOpenImport={resumeAction === 'import'}
+              initialResumeIdToEdit={targetResumeIdToEdit}
+              initialResumeIdToPreview={targetResumeIdToPreview}
+              authState={authState}
+              onOpenAuth={handleOpenAuth}
+              onSelectMasterForATS={(resumeId) => {
+                setSelectedMasterResumeId(resumeId);
+                setActiveTab('ats_score');
+              }}
+            />
           )}
         </main>
 

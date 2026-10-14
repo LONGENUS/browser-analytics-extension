@@ -92,6 +92,7 @@ async def export_resume(
     resume_id: str,
     request: Request,
     format: str = Query("pdf", description="Export format: 'pdf' or 'docx'"),
+    inline: bool = Query(False, description="Preview inline in browser/iframe"),
     template_id: Optional[str] = Query(None, description="Optional template override"),
     template_version: Optional[str] = Query(None, description="Optional template version override"),
     payload: Optional[ExportResumeRequest] = None,
@@ -162,11 +163,13 @@ async def export_resume(
 
     # 5. Generate Binary File OR Return Original Master File
     import os
-    if not resume.is_tailored and resume.original_file_path and os.path.exists(resume.original_file_path):
+    if not resume.is_tailored and (resume.original_file_path or getattr(resume, "original_file_data", None)):
         from services.storage import retrieve_master_resume_file
         try:
             file_bytes = retrieve_master_resume_file(
-                resume.original_file_path, expected_sha256=resume.file_sha256
+                resume.original_file_path or f"db://{resume.id}",
+                expected_sha256=resume.file_sha256,
+                fallback_base64=getattr(resume, "original_file_data", None),
             )
             is_pdf = (resume.file_type == "pdf") or (resume.original_filename and resume.original_filename.lower().endswith(".pdf"))
             media_type = "application/pdf" if is_pdf else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -221,7 +224,8 @@ async def export_resume(
 
     # Safe RFC 5987 Content-Disposition header
     encoded_filename = urllib.parse.quote(filename)
-    content_disposition = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+    disposition_type = "inline" if inline else "attachment"
+    content_disposition = f'{disposition_type}; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
 
     return Response(
         content=file_bytes,

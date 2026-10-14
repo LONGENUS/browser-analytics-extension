@@ -356,6 +356,7 @@ async def download_original_master_resume(
     expected_sha256 = None
     file_type = None
     original_filename = None
+    fallback_base64 = None
 
     if resume:
         # Master Preview Guarantee: Tailored resumes are generated representations, NOT original master documents
@@ -368,6 +369,7 @@ async def download_original_master_resume(
         expected_sha256 = resume.file_sha256
         file_type = resume.file_type
         original_filename = resume.original_filename
+        fallback_base64 = getattr(resume, "original_file_data", None)
     else:
         # 2. Look up in resume_imports table as fallback
         import_result = await db.execute(
@@ -382,8 +384,9 @@ async def download_original_master_resume(
             expected_sha256 = import_rec.file_sha256
             file_type = import_rec.file_type
             original_filename = import_rec.original_filename
+            fallback_base64 = getattr(import_rec, "original_file_data", None)
 
-    if not storage_path:
+    if not storage_path and not fallback_base64:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Original master resume document file is not available or not found."
@@ -404,7 +407,9 @@ async def download_original_master_resume(
 
     try:
         content = retrieve_master_resume_file(
-            storage_path, expected_sha256=expected_sha256
+            storage_path or f"db://{clean_id}",
+            expected_sha256=expected_sha256,
+            fallback_base64=fallback_base64,
         )
     except FileNotFoundError:
         raise HTTPException(

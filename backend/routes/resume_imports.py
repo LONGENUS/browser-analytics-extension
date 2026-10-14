@@ -107,6 +107,8 @@ async def upload_and_parse_resume(
 
     file_type = "docx" if filename_lower.endswith(".docx") else "pdf"
     import_id = str(uuid.uuid4())
+    import base64
+    content_b64 = base64.b64encode(content).decode("utf-8")
 
     # 4. Store Original Master Resume File (Byte-for-Byte Unchanged)
     storage_path, file_sha256, stored_size = store_master_resume_file(
@@ -129,6 +131,7 @@ async def upload_and_parse_resume(
             file_type=file_type,
             file_size=file_size,
             storage_path=storage_path,
+            original_file_data=content_b64,
             file_sha256=file_sha256,
             status="failed",
             error_message=str(val_err),
@@ -149,6 +152,7 @@ async def upload_and_parse_resume(
             file_type=file_type,
             file_size=file_size,
             storage_path=storage_path,
+            original_file_data=content_b64,
             file_sha256=file_sha256,
             status="failed",
             error_message=f"Document read failure: {str(e)}",
@@ -199,6 +203,7 @@ async def upload_and_parse_resume(
         file_sha256=file_sha256,
         original_filename=filename,
         original_file_path=storage_path,
+        original_file_data=content_b64,
         file_type=file_type,
         file_size=file_size,
         created_at=now_utc,
@@ -351,6 +356,7 @@ async def upload_and_parse_resume(
         file_type=file_type,
         file_size=file_size,
         storage_path=storage_path,
+        original_file_data=content_b64,
         file_sha256=file_sha256,
         status="review_required",
         created_at=now_utc,

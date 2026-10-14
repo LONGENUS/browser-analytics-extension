@@ -114,6 +114,7 @@ class Resume(Base):
     original_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     file_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    original_file_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -508,6 +509,7 @@ class ResumeImport(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     file_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    original_file_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="uploaded", nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -712,15 +714,20 @@ async def init_db():
                     ("original_file_path", "VARCHAR(500)"),
                     ("file_type", "VARCHAR(50)"),
                     ("file_size", "INTEGER"),
+                    ("original_file_data", "TEXT"),
                 ]:
                     try:
                         await conn.exec_driver_sql(f"ALTER TABLE resumes ADD COLUMN {col} {col_type};")
                     except Exception:
                         pass
 
-                # Also add file_sha256 to resume_imports if missing
+                # Also add file_sha256 and original_file_data to resume_imports if missing
                 try:
                     await conn.exec_driver_sql("ALTER TABLE resume_imports ADD COLUMN file_sha256 VARCHAR(64);")
+                except Exception:
+                    pass
+                try:
+                    await conn.exec_driver_sql("ALTER TABLE resume_imports ADD COLUMN original_file_data TEXT;")
                 except Exception:
                     pass
 

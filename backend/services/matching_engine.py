@@ -76,7 +76,19 @@ STOPWORDS: Set[str] = {
     "yourself", "yourselves", "will", "shall", "may", "might", "must", "can",
     "role", "job", "position", "candidate", "responsibilities", "requirements",
     "qualifications", "company", "team", "work", "working", "opportunity",
-    "experience", "years", "join", "looking", "seeking", "apply", "description"
+    "experience", "years", "join", "looking", "seeking", "apply", "description",
+    # Generic soft skills and filler words that should not inflate ATS score:
+    "communication", "teamwork", "project", "projects", "ability", "collaborative",
+    "collaboration", "interpersonal", "fast-paced", "detail-oriented", "self-starter",
+    "passionate", "motivated", "dynamic", "flexible", "skills", "skill", "strong",
+    "excellent", "proven", "track", "record", "help", "support", "responsible",
+    "successful", "environment", "solutions", "needs", "business", "client", "clients",
+    "management", "leadership", "time", "high", "quality", "day", "people", "process",
+    "processes", "best", "practices", "impact", "deliver", "delivering", "results",
+    "effective", "effectively", "drive", "driving", "growth", "value", "cross-functional",
+    "cross", "functional", "goals", "organization", "including", "various", "well",
+    "using", "knowledge", "understanding", "professional", "plus", "must-have", "good",
+    "great", "daily", "duties", "task", "tasks", "ensure", "ensuring", "provide", "providing"
 }
 
 def normalize_text(text: Optional[str]) -> str:
@@ -440,6 +452,43 @@ SKILL_TAXONOMY: Dict[str, Dict[str, Any]] = {
         "aliases": ["Analytical Thinking", "Troubleshooting"],
         "case_sensitive": False,
     },
+
+    # --- Architecture, Engineering & Construction ---
+    "AutoCAD": {
+        "category": "Architecture & Engineering",
+        "aliases": ["CAD", "Computer-Aided Design", "2D Drafting"],
+        "case_sensitive": False,
+    },
+    "Revit": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Autodesk Revit", "Revit Architecture", "Revit BIM"],
+        "case_sensitive": False,
+    },
+    "BIM": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Building Information Modeling", "BIM Management", "BIM Coordination"],
+        "case_sensitive": False,
+    },
+    "Architectural Drafting": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Architectural Design", "Drafting", "Schematic Design", "Design Development"],
+        "case_sensitive": False,
+    },
+    "Building Codes": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Local Building Codes", "IBC", "Zoning", "Site Zoning", "Code Compliance"],
+        "case_sensitive": False,
+    },
+    "Architecture": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Commercial Architecture", "Building Architecture", "Architectural Specifications", "AIA"],
+        "case_sensitive": False,
+    },
+    "Structural Coordination": {
+        "category": "Architecture & Engineering",
+        "aliases": ["Structural Engineering", "MEP Coordination", "MEP", "Construction Administration"],
+        "case_sensitive": False,
+    },
 }
 
 
@@ -658,7 +707,11 @@ def split_job_sections(job_text: str) -> Dict[str, str]:
 
     return sections
 
-def extract_job_skills(job_text: str, sections: Dict[str, str]) -> List[Dict[str, Any]]:
+def extract_job_skills(
+    job_text: str,
+    sections: Dict[str, str],
+    job_dict: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     """
     Extracts skills from the job description and marks them as required or preferred.
     """
@@ -679,10 +732,10 @@ def extract_job_skills(job_text: str, sections: Dict[str, str]) -> List[Dict[str
             # Determine if preferred vs required
             is_preferred = False
             # If present in preferred section and NOT in required section
-            in_preferred_section = bool(sections["preferred"] and any(
+            in_preferred_section = bool(sections.get("preferred") and any(
                 p.search(sections["preferred"]) for _, p in entry["matchers"]
             ))
-            in_required_section = bool(sections["required"] and any(
+            in_required_section = bool(sections.get("required") and any(
                 p.search(sections["required"]) for _, p in entry["matchers"]
             ))
 
@@ -695,6 +748,22 @@ def extract_job_skills(job_text: str, sections: Dict[str, str]) -> List[Dict[str
                 "matched_term": matched_term,
                 "is_preferred": is_preferred
             }
+
+    # Extract additional explicit requirements if provided in job_dict
+    if job_dict and job_dict.get("requirements"):
+        raw_reqs = str(job_dict.get("requirements"))
+        parts = re.split(r"[,;\n•]+", raw_reqs)
+        for part in parts:
+            item = part.strip().strip(".-* ")
+            if len(item) >= 2 and item.lower() not in STOPWORDS:
+                already = any(s.lower() == item.lower() for s in found_skills)
+                if not already:
+                    found_skills[item] = {
+                        "canonical": item,
+                        "category": "Requirements",
+                        "matched_term": item,
+                        "is_preferred": False,
+                    }
 
     return list(found_skills.values())
 
@@ -713,7 +782,7 @@ def match_skills(
     Calculates skill match percentage score (0-100).
     """
     if not job_skills:
-        return [], [], 100.0
+        return [], [], 0.0
 
     matched_skills = []
     missing_skills = []
@@ -733,6 +802,38 @@ def match_skills(
         # Find match in taxonomy
         tax_entry = next((e for e in COMPILED_TAXONOMY if e["canonical"] == canonical), None)
         if not tax_entry:
+            # Dynamic matching for requirements outside precompiled taxonomy
+            req_tokens = extract_meaningful_tokens(canonical)
+            best_overlap = 0.0
+            best_ev = None
+            if req_tokens:
+                for evidence in evidence_items:
+                    ev_tokens = set(extract_meaningful_tokens(evidence.text))
+                    overlap = sum(1 for t in req_tokens if t in ev_tokens) / float(len(req_tokens))
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_ev = evidence
+
+            if best_overlap >= 0.5 and best_ev:
+                matched_skills.append({
+                    "canonical": canonical,
+                    "alias_matched": canonical,
+                    "category": category,
+                    "is_preferred": is_preferred,
+                    "evidence_strength": "strong" if best_overlap >= 0.8 else "moderate",
+                    "evidence": best_ev.text[:200] if len(best_ev.text) > 200 else best_ev.text,
+                    "location": best_ev.location_label,
+                    "status": "matched",
+                })
+                achieved_weight += item_weight * (1.0 if best_overlap >= 0.8 else 0.6)
+            else:
+                missing_skills.append({
+                    "canonical": canonical,
+                    "category": category,
+                    "is_preferred": is_preferred,
+                    "status": "missing",
+                    "message": f"{canonical} was not found in the selected resume."
+                })
             continue
 
         best_evidence: Optional[ResumeEvidenceItem] = None
@@ -784,7 +885,7 @@ def match_skills(
                 "message": f"{canonical} was not found in the selected resume."
             })
 
-    skill_score = (achieved_weight / total_weight * 100.0) if total_weight > 0 else 100.0
+    skill_score = (achieved_weight / total_weight * 100.0) if total_weight > 0 else 0.0
     return matched_skills, missing_skills, round(skill_score, 1)
 
 
@@ -1196,7 +1297,7 @@ def run_job_match_analysis(
     # 1. Job Sections & Skill Extraction
     full_job_text = f"{job_title}\n{job_desc}\n{job_dict.get('requirements') or ''}\n{job_dict.get('qualifications') or ''}\n{job_dict.get('responsibilities') or ''}"
     sections = split_job_sections(full_job_text)
-    extracted_job_skills = extract_job_skills(full_job_text, sections)
+    extracted_job_skills = extract_job_skills(full_job_text, sections, job_dict=job_dict)
 
     # 2. Skill Matching
     matched_skills, missing_skills, skill_score = match_skills(extracted_job_skills, evidence_items)
@@ -1219,12 +1320,25 @@ def run_job_match_analysis(
     keyword_coverage = analyze_keyword_coverage(full_job_text, evidence_items)
     kw_score = float(keyword_coverage["score"])
 
+    # Domain relevance check: If the job requires distinct domain skills and the candidate has
+    # very low or zero skill overlap, prevent generic experience or unstated qualifications
+    # from creating a misleadingly high score.
+    if extracted_job_skills and skill_score < 25:
+        domain_factor = max(0.0, skill_score / 25.0)
+        effective_exp_score = exp_score * domain_factor
+        effective_qual_score = qual_score * domain_factor
+        effective_resp_score = resp_score * domain_factor
+    else:
+        effective_exp_score = exp_score
+        effective_qual_score = qual_score
+        effective_resp_score = resp_score
+
     # 7. Weighted Overall Score
     weighted_score = (
         (skill_score * WEIGHT_SKILLS) +
-        (resp_score * WEIGHT_RESPONSIBILITIES) +
-        (exp_score * WEIGHT_EXPERIENCE) +
-        (qual_score * WEIGHT_QUALIFICATIONS) +
+        (effective_resp_score * WEIGHT_RESPONSIBILITIES) +
+        (effective_exp_score * WEIGHT_EXPERIENCE) +
+        (effective_qual_score * WEIGHT_QUALIFICATIONS) +
         (kw_score * WEIGHT_KEYWORDS)
     )
 

@@ -85,9 +85,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onNavigateTab('resumes');
       }
     } else if (item.type === 'tailored_resume') {
-      onNavigateTab('tailored');
+      onNavigateTab('resumes');
     } else if (item.type === 'job') {
-      onNavigateTab('jobs');
+      onNavigateTab('ats_score');
     }
   };
 
@@ -194,7 +194,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         {/* Tailored Resumes Card */}
         <div
-          onClick={() => onNavigateTab('tailored')}
+          onClick={() => onNavigateTab('resumes')}
           className="group cursor-pointer p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500/50 dark:hover:border-purple-500/50 shadow-2xs hover:shadow-md transition-all flex items-center justify-between"
         >
           <div className="space-y-1">
@@ -210,7 +210,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold group-hover:underline flex items-center gap-1 pt-1">
-              <span>View History</span>
+              <span>View in Resumes</span>
               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </p>
           </div>
@@ -221,12 +221,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         {/* Saved Jobs Card */}
         <div
-          onClick={() => onNavigateTab('jobs')}
+          onClick={() => onNavigateTab('ats_score')}
           className="group cursor-pointer p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 shadow-2xs hover:shadow-md transition-all flex items-center justify-between"
         >
           <div className="space-y-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Saved Jobs
+              ATS Scoring
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
@@ -237,7 +237,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold group-hover:underline flex items-center gap-1 pt-1">
-              <span>Browse Library</span>
+              <span>Open ATS Score</span>
               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </p>
           </div>
@@ -276,18 +276,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </button>
 
           <button
-            onClick={() => onNavigateTab('tailor')}
+            onClick={() => onNavigateTab('ats_score')}
             className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 text-left transition-all group shadow-2xs"
           >
             <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div className="text-xs font-bold text-slate-900 dark:text-white">Tailor a Resume</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white">Score & Tailor</div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Adapt for active job</div>
           </button>
 
           <button
-            onClick={() => onNavigateTab('jobs')}
+            onClick={() => onNavigateTab('ats_score')}
             className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 text-left transition-all group shadow-2xs"
           >
             <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">

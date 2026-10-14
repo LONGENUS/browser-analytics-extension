@@ -78,6 +78,12 @@ class SaveTailoredResumeRequest(BaseModel):
     tailored_match_score: Optional[int] = Field(None)
 
 
+class DirectTailorRequest(BaseModel):
+    resume_id: str = Field(..., description="Target master resume UUID")
+    job_id: str = Field(..., description="Target job UUID")
+    name: Optional[str] = Field(None, description="Optional custom name for tailored resume")
+
+
 # --- Endpoints ---
 
 @router.get("/tailor/ai-status")
@@ -515,6 +521,281 @@ async def save_tailored_resume(
         "tailored_resume": loaded_resume.to_full_dict() if loaded_resume else payload.tailored_resume,
         "source_resume_id": source_resume.id,
         "target_job_id": job.id,
+    }
+
+
+@router.post("/direct-tailor")
+async def direct_tailor_resume(
+    payload: DirectTailorRequest,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Directly generates and persists a tailored resume from the selected master resume
+    and target job description using the server-side AI provider (Groq) or deterministic pipeline.
+    Preserves original document formatting & structure, never overwrites master resume.
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+    tailor_rate_limiter.check(request, user_id=user_id)
+
+    # 1. Look up master resume
+    clean_id = payload.resume_id.replace("draft-", "") if payload.resume_id else payload.resume_id
+    res_stmt = select(Resume).where(
+        (Resume.id == payload.resume_id) | (Resume.id == clean_id),
+        Resume.user_id == user_id,
+    )
+    source_resume = (await db.execute(res_stmt)).scalars().first()
+
+    if not source_resume:
+        import_stmt = select(ResumeImport).where(
+            (ResumeImport.id == payload.resume_id) | (ResumeImport.id == clean_id),
+            ResumeImport.user_id == user_id,
+        )
+        import_rec = (await db.execute(import_stmt)).scalars().first()
+        if import_rec and import_rec.file_sha256:
+            existing_by_sha = await db.execute(
+                select(Resume).where(
+                    Resume.file_sha256 == import_rec.file_sha256,
+                    Resume.user_id == user_id,
+                )
+            )
+            source_resume = existing_by_sha.scalars().first()
+
+    if not source_resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Master resume not found or access denied.")
+
+    if source_resume.is_tailored:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected resume is already a tailored resume. Please choose a master resume as the source.")
+
+    # 2. Look up job
+    job_stmt = select(Job).where(Job.id == payload.job_id, Job.user_id == user_id)
+    job = (await db.execute(job_stmt)).scalars().first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target job not found or access denied.")
+
+    # 3. Generate tailored content using configured pipeline
+    job_dict = job.to_dict()
+    source_dict = source_resume.to_full_dict()
+
+    opts = TailoringOptions(
+        tailoring_mode="balanced",
+        prioritize_skills=True,
+        prioritize_experience_bullets=True,
+        prioritize_projects=True,
+        adapt_summary=True,
+        concise_mode=False,
+        bullet_rewriting="balanced",
+    )
+
+    if settings.is_groq_configured:
+        try:
+            result = await execute_ai_tailoring_pipeline(source_dict, job_dict, options=opts)
+        except Exception:
+            result = execute_tailoring_pipeline(source_dict, job_dict, options=opts)
+    else:
+        result = execute_tailoring_pipeline(source_dict, job_dict, options=opts)
+
+    tailored_data = result.get("tailored_resume") or source_dict
+    change_log = result.get("change_log") or []
+
+    # 4. Save as a separate tailored resume record
+    new_resume_id = str(uuid.uuid4())
+    now_utc = datetime.now(timezone.utc)
+    job_title_short = (job.job_title or "Target Job")[:40]
+    tailored_name = (payload.name or f"Tailored — {job_title_short}").strip()
+
+    new_resume = Resume(
+        id=new_resume_id,
+        user_id=user_id,
+        name=tailored_name[:250],
+        is_default=False,
+        status="ready",
+        source_resume_id=source_resume.id,
+        target_job_id=job.id,
+        is_tailored=True,
+        template_id=source_resume.template_id or "ats-classic",
+        template_version=source_resume.template_version or "v1.0.0",
+        original_filename=source_resume.original_filename,
+        original_file_path=source_resume.original_file_path,
+        original_file_data=source_resume.original_file_data,
+        file_type=source_resume.file_type,
+        file_size=source_resume.file_size,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(new_resume)
+
+    # Personal Information
+    p_info = tailored_data.get("personal_info") or {}
+    personal_info = ResumePersonalInfo(
+        id=str(uuid.uuid4()),
+        resume_id=new_resume_id,
+        full_name=p_info.get("full_name"),
+        headline=p_info.get("headline"),
+        email=p_info.get("email"),
+        phone=p_info.get("phone"),
+        location=p_info.get("location"),
+        website=p_info.get("website"),
+        linkedin_url=p_info.get("linkedin_url"),
+        github_url=p_info.get("github_url"),
+        portfolio_url=p_info.get("portfolio_url"),
+    )
+    db.add(personal_info)
+
+    # Professional Summary
+    sum_data = tailored_data.get("summary") or {}
+    summary_text = sum_data.get("summary") or sum_data.get("content") or ""
+    summary_obj = ResumeSummary(
+        id=str(uuid.uuid4()),
+        resume_id=new_resume_id,
+        summary=summary_text,
+    )
+    db.add(summary_obj)
+
+    # Experiences & Bullets
+    for exp_order, exp in enumerate(tailored_data.get("experiences") or []):
+        exp_id = str(uuid.uuid4())
+        db_exp = ResumeExperience(
+            id=exp_id,
+            resume_id=new_resume_id,
+            company=exp.get("company") or exp.get("company_name", "Company"),
+            job_title=exp.get("job_title", "Position"),
+            location=exp.get("location"),
+            employment_type=exp.get("employment_type"),
+            start_date=exp.get("start_date"),
+            end_date=exp.get("end_date"),
+            is_current=exp.get("is_current", False),
+            description=exp.get("description"),
+            display_order=exp_order,
+        )
+        db.add(db_exp)
+
+        for b_order, bullet in enumerate(exp.get("bullets") or []):
+            b_text = bullet.get("content", "") if isinstance(bullet, dict) else str(bullet)
+            db_bullet = ResumeExperienceBullet(
+                id=str(uuid.uuid4()),
+                experience_id=exp_id,
+                content=b_text,
+                display_order=b_order,
+            )
+            db.add(db_bullet)
+
+    # Skills
+    for s_order, sk in enumerate(tailored_data.get("skills") or []):
+        s_name = (sk.get("skill_name") or sk.get("name") or "").strip()
+        if s_name:
+            db_skill = ResumeSkill(
+                id=str(uuid.uuid4()),
+                resume_id=new_resume_id,
+                skill_name=s_name,
+                category=sk.get("category", "Technical") if isinstance(sk, dict) else "Technical",
+                display_order=s_order,
+            )
+            db.add(db_skill)
+
+    # Projects
+    for p_order, proj in enumerate(tailored_data.get("projects") or []):
+        proj_id = str(uuid.uuid4())
+        tech_val = proj.get("technologies") or ""
+        db_proj = ResumeProject(
+            id=proj_id,
+            resume_id=new_resume_id,
+            name=proj.get("name", "Project"),
+            description=proj.get("description"),
+            url=proj.get("url"),
+            technologies=", ".join(tech_val) if isinstance(tech_val, list) else str(tech_val),
+            display_order=p_order,
+        )
+        db.add(db_proj)
+
+        for pb_order, pb in enumerate(proj.get("bullets") or []):
+            pb_text = pb.get("content", "") if isinstance(pb, dict) else str(pb)
+            db_pb = ResumeProjectBullet(
+                id=str(uuid.uuid4()),
+                project_id=proj_id,
+                content=pb_text,
+                display_order=pb_order,
+            )
+            db.add(db_pb)
+
+    # Educations
+    for edu_order, edu in enumerate(tailored_data.get("educations") or []):
+        db_edu = ResumeEducation(
+            id=str(uuid.uuid4()),
+            resume_id=new_resume_id,
+            institution=edu.get("institution", "Institution"),
+            degree=edu.get("degree"),
+            field_of_study=edu.get("field_of_study"),
+            location=edu.get("location"),
+            start_date=edu.get("start_date"),
+            end_date=edu.get("end_date"),
+            description=edu.get("description"),
+            display_order=edu_order,
+        )
+        db.add(db_edu)
+
+    # Certifications
+    for cert_order, cert in enumerate(tailored_data.get("certifications") or []):
+        c_name = cert.get("name") if isinstance(cert, dict) else str(cert)
+        db_cert = ResumeCertification(
+            id=str(uuid.uuid4()),
+            resume_id=new_resume_id,
+            name=c_name,
+            issuer=cert.get("issuer") if isinstance(cert, dict) else None,
+            issue_date=cert.get("issue_date") if isinstance(cert, dict) else None,
+            expiration_date=cert.get("expiration_date") if isinstance(cert, dict) else None,
+            display_order=cert_order,
+        )
+        db.add(db_cert)
+
+    # Links
+    for link_order, link in enumerate(tailored_data.get("links") or []):
+        db_link = ResumeLink(
+            id=str(uuid.uuid4()),
+            resume_id=new_resume_id,
+            label=link.get("label", "Link"),
+            url=link.get("url", ""),
+            display_order=link_order,
+        )
+        db.add(db_link)
+
+    # TailoredResume audit/metadata
+    tailored_meta = TailoredResume(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        source_resume_id=source_resume.id,
+        target_job_id=job.id,
+        tailored_resume_id=new_resume_id,
+        tailoring_mode="balanced",
+        tailoring_plan=result.get("tailoring_plan") or {},
+        change_log=change_log,
+        original_match_score=result.get("original_match_score"),
+        tailored_match_score=result.get("tailored_match_score"),
+        algorithm_version=TAILORING_ALGORITHM_VERSION,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(tailored_meta)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": "Tailored resume generated and saved successfully.",
+        "tailored_resume_id": new_resume.id,
+        "name": new_resume.name,
+        "source_resume_id": source_resume.id,
+        "source_resume_name": source_resume.name,
+        "target_job_id": job.id,
+        "target_job_title": job.job_title,
+        "target_company_name": job.company_name,
+        "preview_url": f"/api/resumes/{new_resume.id}/export?format=pdf&inline=true",
+        "download_pdf_url": f"/api/resumes/{new_resume.id}/export?format=pdf",
+        "download_docx_url": f"/api/resumes/{new_resume.id}/export?format=docx",
+        "created_at": now_utc.isoformat(),
     }
 
 

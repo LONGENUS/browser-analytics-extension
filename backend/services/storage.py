@@ -144,7 +144,7 @@ def store_master_resume_file(
     supabase_uri = _upload_to_supabase_storage(user_id, record_id, clean_filename, content)
     primary_path = supabase_uri if supabase_uri else target_path
 
-    return target_path, sha256_hash, file_size
+    return primary_path, sha256_hash, file_size
 
 
 class MasterResumeTamperError(ValueError):
@@ -153,36 +153,63 @@ class MasterResumeTamperError(ValueError):
 
 
 def retrieve_master_resume_file(
-    storage_path: str,
+    storage_path: Optional[str] = None,
     expected_sha256: Optional[str] = None,
+    fallback_base64: Optional[str] = None,
 ) -> bytes:
     """
     Retrieves the exact binary bytes of the original master resume.
+    Checks:
+    1. Local filesystem path if exists.
+    2. Supabase Storage URI if configured.
+    3. Direct persistent database base64 data.
+    4. /tmp fallback path on serverless containers.
     If expected_sha256 is provided, verifies that the file has not been altered.
     """
+    import base64
     content = None
 
-    # Check local filesystem path first
+    # 1. Check local filesystem path first
     if storage_path and not storage_path.startswith("supabase://") and os.path.exists(storage_path):
-        with open(storage_path, "rb") as f:
-            content = f.read()
+        try:
+            with open(storage_path, "rb") as f:
+                content = f.read()
+        except Exception:
+            content = None
 
-    # If missing locally or stored in Supabase, fetch from Supabase
+    # 2. If missing locally or stored in Supabase, fetch from Supabase
     if content is None and storage_path and storage_path.startswith("supabase://"):
         content = _download_from_supabase_storage(storage_path)
 
-    # If still not found and running serverless, check /tmp fallback path
+    # 3. If stored locally in /tmp on another lambda instance, try Supabase recovery
+    if content is None and storage_path and "/resumes/" in storage_path.replace("\\", "/"):
+        rel_uri = storage_path.replace("\\", "/").split("/resumes/")[-1]
+        bucket = getattr(settings, "SUPABASE_RESUME_BUCKET", "resume-imports")
+        content = _download_from_supabase_storage(f"supabase://{bucket}/{rel_uri}")
+
+    # 4. Check persistent base64 database fallback (guarantees persistence across serverless cold starts)
+    if content is None and fallback_base64:
+        try:
+            content = base64.b64decode(fallback_base64)
+        except Exception as b64_err:
+            print(f"[WARN] Failed to decode fallback base64 file data: {b64_err}")
+            content = None
+
+    # 5. If still not found and running serverless, check /tmp fallback path
     if content is None and storage_path:
         tmp_base = os.path.join("/tmp", "tailorresume_storage", "resumes")
         rel_parts = storage_path.replace("\\", "/").split("storage/resumes/")
         if len(rel_parts) == 2:
             alt_path = os.path.join(tmp_base, rel_parts[1].replace("/", os.sep))
             if os.path.exists(alt_path):
-                with open(alt_path, "rb") as f:
-                    content = f.read()
+                try:
+                    with open(alt_path, "rb") as f:
+                        content = f.read()
+                except Exception:
+                    content = None
 
     if content is None:
-        raise FileNotFoundError(f"Original master resume file not found at: {storage_path}")
+        raise FileNotFoundError(f"Original master resume document file not found at: {storage_path}")
 
     if expected_sha256:
         actual_sha256 = compute_sha256(content)
