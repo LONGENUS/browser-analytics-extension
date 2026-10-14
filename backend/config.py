@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # Model catalog: https://console.groq.com/docs/models
     # Key management: https://console.groq.com/keys
     GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     AI_PROVIDER: str = "groq"
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # Legacy / Alternative Tailoring Settings
     TAILORING_LLM_PROVIDER: str = "groq"
-    TAILORING_LLM_MODEL: str = "llama-3.3-70b-versatile"
+    TAILORING_LLM_MODEL: str = "openai/gpt-oss-120b"
     TAILORING_LLM_ENABLED: bool = True
     HUGGINGFACE_API_KEY: Optional[str] = None
     TAILORING_MAX_REWRITE_CANDIDATES: int = 3

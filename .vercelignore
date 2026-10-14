@@ -24,3 +24,5 @@ backend/webintel.db-journal
 docs/
 docker-compose.yml
 backend/Dockerfile
+tests/
+backend/storage/

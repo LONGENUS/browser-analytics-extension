@@ -45,7 +45,7 @@ class GroqProvider(BaseAIProvider):
         max_retries: Optional[int] = None,
     ):
         self._api_key = api_key or settings.GROQ_API_KEY or ""
-        self._default_model = model or settings.GROQ_MODEL or "llama-3.3-70b-versatile"
+        self._default_model = model or settings.GROQ_MODEL or "openai/gpt-oss-120b"
         self._base_url = (base_url or settings.GROQ_BASE_URL or "https://api.groq.com/openai/v1").rstrip("/")
         self._timeout = timeout_seconds or settings.AI_REQUEST_TIMEOUT_SECONDS or 30
         self._max_retries = max_retries if max_retries is not None else settings.AI_MAX_RETRIES

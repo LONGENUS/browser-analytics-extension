@@ -249,7 +249,7 @@ def test_1_groq_configuration_and_secret_hygiene():
     """Verify Groq API configuration and server-side secret encapsulation."""
     print("\n--- Test 1: Groq Configuration & Secret Hygiene ---")
     assert settings.GROQ_BASE_URL == "https://api.groq.com/openai/v1"
-    assert settings.GROQ_MODEL in ("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+    assert settings.GROQ_MODEL in ("openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
     assert settings.AI_PROVIDER == "groq"
 
     # Verify is_groq_configured accurately classifies placeholder keys
