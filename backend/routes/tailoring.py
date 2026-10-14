@@ -37,6 +37,7 @@ from models.database import (
     Job,
     TailoredResume,
     ResumeImport,
+    ResumeChangeRecord,
 )
 from services.auth import get_current_user
 from services.matching_engine import run_job_match_analysis
@@ -50,6 +51,7 @@ from services.rate_limiter import tailor_rate_limiter
 from services.ai.tailoring_orchestrator import execute_ai_tailoring_pipeline
 from services.ai.groq_provider import GroqProvider
 from services.job_context import InvalidJobDescriptionError
+from services.change_tracker import compute_resume_diff
 
 router = APIRouter()
 
@@ -763,6 +765,34 @@ async def direct_tailor_resume(
         )
         db.add(db_link)
 
+    # Compute and persist precise change records between source and tailored resumes
+    diff_changes = compute_resume_diff(
+        source_resume=source_dict,
+        tailored_resume=tailored_data,
+        source_id=source_resume.id,
+        tailored_id=new_resume_id,
+    )
+    for ch in diff_changes:
+        ch_rec = ResumeChangeRecord(
+            id=ch.get("id") or str(uuid.uuid4()),
+            user_id=user_id,
+            source_resume_id=source_resume.id,
+            tailored_resume_id=new_resume_id,
+            section=ch["section"],
+            paragraph_id=ch["paragraph_id"],
+            section_title=ch["section_title"],
+            item_title=ch.get("item_title"),
+            change_type=ch["change_type"],
+            original_text=ch.get("original_text"),
+            proposed_text=ch.get("proposed_text"),
+            diff_segments=ch.get("diff_segments") or [],
+            explanation=ch.get("explanation"),
+            status=ch.get("status", "accepted"),
+            created_at=now_utc,
+            updated_at=now_utc,
+        )
+        db.add(ch_rec)
+
     # TailoredResume audit/metadata
     tailored_meta = TailoredResume(
         id=str(uuid.uuid4()),
@@ -772,7 +802,7 @@ async def direct_tailor_resume(
         tailored_resume_id=new_resume_id,
         tailoring_mode="balanced",
         tailoring_plan=result.get("tailoring_plan") or {},
-        change_log=change_log,
+        change_log=diff_changes,
         original_match_score=result.get("original_match_score"),
         tailored_match_score=result.get("tailored_match_score"),
         algorithm_version=TAILORING_ALGORITHM_VERSION,
@@ -976,3 +1006,289 @@ async def delete_tailored_resume(
 
     await db.commit()
     return {"deleted": True, "id": tailoring_id}
+
+
+# ==============================================================================
+# AI CHANGE TRACKING & REVIEW ENDPOINTS
+# ==============================================================================
+
+class ChangeReviewPayload(BaseModel):
+    status: str = Field(..., description="'accepted' or 'rejected'")
+
+
+class BatchReviewPayload(BaseModel):
+    action: str = Field(..., description="'accept_all' or 'reject_all'")
+
+
+@router.get("/{resume_id}/changes")
+async def get_tailored_resume_changes(
+    resume_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retrieves the complete AI change tracking records for a given tailored resume.
+    If change records were not previously stored, computes them dynamically against the source resume.
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+    # 1. Fetch Tailored Resume
+    res_stmt = select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    resume = (await db.execute(res_stmt)).scalars().first()
+    if not resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tailored resume not found or access denied.")
+
+    # 2. Check existing change records
+    ch_stmt = select(ResumeChangeRecord).where(
+        ResumeChangeRecord.tailored_resume_id == resume_id,
+        ResumeChangeRecord.user_id == user_id,
+    ).order_by(ResumeChangeRecord.created_at)
+    records = (await db.execute(ch_stmt)).scalars().all()
+
+    source_resume = None
+    if resume.source_resume_id:
+        src_stmt = select(Resume).where(Resume.id == resume.source_resume_id, Resume.user_id == user_id)
+        source_resume = (await db.execute(src_stmt)).scalars().first()
+
+    # 3. If records don't exist yet, compute dynamically from source resume
+    if not records and source_resume:
+        diff_changes = compute_resume_diff(
+            source_resume=source_resume.to_full_dict(),
+            tailored_resume=resume.to_full_dict(),
+            source_id=source_resume.id,
+            tailored_id=resume.id,
+        )
+        now_utc = datetime.now(timezone.utc)
+        records = []
+        for ch in diff_changes:
+            rec = ResumeChangeRecord(
+                id=ch.get("id") or str(uuid.uuid4()),
+                user_id=user_id,
+                source_resume_id=source_resume.id,
+                tailored_resume_id=resume.id,
+                section=ch["section"],
+                paragraph_id=ch["paragraph_id"],
+                section_title=ch["section_title"],
+                item_title=ch.get("item_title"),
+                change_type=ch["change_type"],
+                original_text=ch.get("original_text"),
+                proposed_text=ch.get("proposed_text"),
+                diff_segments=ch.get("diff_segments") or [],
+                explanation=ch.get("explanation"),
+                status=ch.get("status", "accepted"),
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.add(rec)
+            records.append(rec)
+        await db.commit()
+
+    changes_dict = [r.to_dict() for r in records]
+    added_count = sum(1 for c in changes_dict if c["change_type"] == "added")
+    modified_count = sum(1 for c in changes_dict if c["change_type"] == "modified")
+    removed_count = sum(1 for c in changes_dict if c["change_type"] == "removed")
+    unchanged_count = sum(1 for c in changes_dict if c["change_type"] == "unchanged")
+
+    return {
+        "status": "success",
+        "tailored_resume_id": resume.id,
+        "tailored_resume_name": resume.name,
+        "source_resume_id": resume.source_resume_id,
+        "source_resume_name": source_resume.name if source_resume else "Source Master Resume",
+        "total_changes": added_count + modified_count + removed_count,
+        "counts": {
+            "added": added_count,
+            "modified": modified_count,
+            "removed": removed_count,
+            "unchanged": unchanged_count,
+        },
+        "changes": changes_dict,
+    }
+
+
+@router.post("/{resume_id}/changes/{change_id}/review")
+async def review_resume_change(
+    resume_id: str,
+    change_id: str,
+    payload: ChangeReviewPayload,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accepts or rejects an individual AI change.
+    When rejected, the underlying resume entity is cleanly reverted to original source text.
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+    # 1. Fetch Change Record
+    stmt = select(ResumeChangeRecord).where(
+        ResumeChangeRecord.id == change_id,
+        ResumeChangeRecord.tailored_resume_id == resume_id,
+        ResumeChangeRecord.user_id == user_id,
+    )
+    change = (await db.execute(stmt)).scalars().first()
+    if not change:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change record not found or access denied.")
+
+    # 2. Fetch Resume Record
+    res_stmt = select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    resume = (await db.execute(res_stmt)).scalars().first()
+    if not resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found or access denied.")
+
+    new_status = payload.status.lower().strip()
+    if new_status not in ("accepted", "rejected", "pending"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status must be 'accepted' or 'rejected'.")
+
+    target_text = change.proposed_text if new_status == "accepted" else (change.original_text or "")
+
+    # 3. Apply target text to live Resume entities
+    if change.section == "summary":
+        sum_stmt = select(ResumeSummary).where(ResumeSummary.resume_id == resume_id)
+        summary_obj = (await db.execute(sum_stmt)).scalars().first()
+        if summary_obj:
+            summary_obj.summary = target_text
+            summary_obj.updated_at = datetime.now(timezone.utc)
+    elif change.section == "experience_bullet":
+        m = re.match(r"exp_(\d+)_b_(\d+)", change.paragraph_id)
+        if m:
+            e_idx = int(m.group(1))
+            b_idx = int(m.group(2))
+            exp_stmt = select(ResumeExperience).where(
+                ResumeExperience.resume_id == resume_id
+            ).order_by(ResumeExperience.display_order)
+            exps = (await db.execute(exp_stmt)).scalars().all()
+            if e_idx < len(exps):
+                exp_rec = exps[e_idx]
+                bullet_stmt = select(ResumeExperienceBullet).where(
+                    ResumeExperienceBullet.experience_id == exp_rec.id
+                ).order_by(ResumeExperienceBullet.display_order)
+                bullets = (await db.execute(bullet_stmt)).scalars().all()
+                if b_idx < len(bullets):
+                    bullets[b_idx].content = target_text
+        else:
+            exp_stmt = select(ResumeExperience).where(ResumeExperience.resume_id == resume_id)
+            exps = (await db.execute(exp_stmt)).scalars().all()
+            for exp_rec in exps:
+                bullet_stmt = select(ResumeExperienceBullet).where(
+                    ResumeExperienceBullet.experience_id == exp_rec.id
+                )
+                bullets = (await db.execute(bullet_stmt)).scalars().all()
+                for b in bullets:
+                    if b.content in (change.proposed_text, change.original_text):
+                        b.content = target_text
+                        break
+    elif change.section == "skills":
+        if change.change_type == "added" and new_status == "rejected":
+            await db.execute(
+                delete(ResumeSkill).where(
+                    ResumeSkill.resume_id == resume_id,
+                    ResumeSkill.skill_name == change.proposed_text,
+                )
+            )
+        elif change.change_type == "removed" and new_status == "rejected":
+            restored_skill = ResumeSkill(
+                id=str(uuid.uuid4()),
+                resume_id=resume_id,
+                skill_name=change.original_text or "",
+                category="Technical",
+                display_order=99,
+            )
+            db.add(restored_skill)
+    elif change.section == "project":
+        proj_stmt = select(ResumeProject).where(ResumeProject.resume_id == resume_id)
+        projs = (await db.execute(proj_stmt)).scalars().all()
+        for p in projs:
+            if p.description in (change.proposed_text, change.original_text):
+                p.description = target_text
+
+    # 4. Update change status
+    change.status = new_status
+    change.updated_at = datetime.now(timezone.utc)
+
+    # 5. Sync TailoredResume.change_log if present
+    tailored_meta_stmt = select(TailoredResume).where(
+        TailoredResume.tailored_resume_id == resume_id,
+        TailoredResume.user_id == user_id,
+    )
+    tailored_meta = (await db.execute(tailored_meta_stmt)).scalars().first()
+    if tailored_meta and tailored_meta.change_log:
+        updated_log = []
+        for item in tailored_meta.change_log:
+            if item.get("id") == change_id or item.get("paragraph_id") == change.paragraph_id:
+                item["status"] = new_status
+            updated_log.append(item)
+        tailored_meta.change_log = updated_log
+
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Change marked as {new_status}.",
+        "change": change.to_dict(),
+    }
+
+
+@router.post("/{resume_id}/review-batch")
+async def batch_review_changes(
+    resume_id: str,
+    payload: BatchReviewPayload,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accepts all or rejects all AI changes for a tailored resume in a single action.
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+    action = payload.action.lower().strip()
+    target_status = "accepted" if action == "accept_all" else "rejected"
+
+    stmt = select(ResumeChangeRecord).where(
+        ResumeChangeRecord.tailored_resume_id == resume_id,
+        ResumeChangeRecord.user_id == user_id,
+    )
+    changes = (await db.execute(stmt)).scalars().all()
+    if not changes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No changes found for this resume.")
+
+    for ch in changes:
+        ch.status = target_status
+        ch.updated_at = datetime.now(timezone.utc)
+        if target_status == "rejected":
+            target_text = ch.original_text or ""
+            if ch.section == "summary":
+                sum_stmt = select(ResumeSummary).where(ResumeSummary.resume_id == resume_id)
+                summary_obj = (await db.execute(sum_stmt)).scalars().first()
+                if summary_obj:
+                    summary_obj.summary = target_text
+            elif ch.section == "experience_bullet":
+                m = re.match(r"exp_(\d+)_b_(\d+)", ch.paragraph_id)
+                if m:
+                    e_idx = int(m.group(1))
+                    b_idx = int(m.group(2))
+                    exp_stmt = select(ResumeExperience).where(
+                        ResumeExperience.resume_id == resume_id
+                    ).order_by(ResumeExperience.display_order)
+                    exps = (await db.execute(exp_stmt)).scalars().all()
+                    if e_idx < len(exps):
+                        exp_rec = exps[e_idx]
+                        bullet_stmt = select(ResumeExperienceBullet).where(
+                            ResumeExperienceBullet.experience_id == exp_rec.id
+                        ).order_by(ResumeExperienceBullet.display_order)
+                        bullets = (await db.execute(bullet_stmt)).scalars().all()
+                        if b_idx < len(bullets):
+                            bullets[b_idx].content = target_text
+
+    await db.commit()
+    return {
+        "status": "success",
+        "action": action,
+        "affected_count": len(changes),
+    }

@@ -13,6 +13,45 @@ import {
   TailoredResumeMetadata,
 } from '../types/tailoring';
 
+export interface DiffSegment {
+  type: 'equal' | 'added' | 'removed';
+  text: string;
+}
+
+export interface ResumeChangeItem {
+  id: string;
+  source_resume_id: string;
+  tailored_resume_id: string;
+  section: string;
+  paragraph_id: string;
+  section_title: string;
+  item_title?: string;
+  change_type: 'added' | 'modified' | 'removed' | 'unchanged';
+  original_text?: string;
+  proposed_text?: string;
+  diff_segments: DiffSegment[];
+  explanation?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ResumeChangesResponse {
+  status: string;
+  tailored_resume_id: string;
+  tailored_resume_name: string;
+  source_resume_id: string;
+  source_resume_name: string;
+  total_changes: number;
+  counts: {
+    added: number;
+    modified: number;
+    removed: number;
+    unchanged: number;
+  };
+  changes: ResumeChangeItem[];
+}
+
 export class TailoringService {
   /**
    * Generates an in-memory job-specific tailored draft without modifying the master resume.
@@ -129,6 +168,55 @@ export class TailoringService {
       throw new Error(err.detail || `Direct tailoring failed (${resp.status})`);
     }
 
+    return resp.json();
+  }
+
+  /**
+   * Retrieves complete AI change tracking records for a tailored resume.
+   */
+  async getTailoredResumeChanges(resumeId: string): Promise<ResumeChangesResponse> {
+    const resp = await authenticatedFetch(`/api/tailoring/${resumeId}/changes`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch resume changes (${resp.status})`);
+    }
+    return resp.json();
+  }
+
+  /**
+   * Reviews (accepts or rejects) an individual AI change.
+   */
+  async reviewTailoredResumeChange(
+    resumeId: string,
+    changeId: string,
+    status: 'accepted' | 'rejected'
+  ): Promise<{ status: string; message: string; change: ResumeChangeItem }> {
+    const resp = await authenticatedFetch(`/api/tailoring/${resumeId}/changes/${changeId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to review change (${resp.status})`);
+    }
+    return resp.json();
+  }
+
+  /**
+   * Accepts or rejects all AI changes in batch.
+   */
+  async batchReviewChanges(
+    resumeId: string,
+    action: 'accept_all' | 'reject_all'
+  ): Promise<{ status: string; action: string; affected_count: number }> {
+    const resp = await authenticatedFetch(`/api/tailoring/${resumeId}/review-batch`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to batch review changes (${resp.status})`);
+    }
     return resp.json();
   }
 }

@@ -30,6 +30,7 @@ import { AuthState } from '../../services/auth';
 import { MasterDocumentPreview } from './MasterDocumentPreview';
 import { tailoringService } from '../../services/tailoring.service';
 import { TailoredResumeMetadata } from '../../types/tailoring';
+import { TailoredResumeReviewModal } from './TailoredResumeReviewModal';
 
 interface ResumeDashboardProps {
   initialOpenCreate?: boolean;
@@ -93,6 +94,7 @@ export const ResumeDashboard: React.FC<ResumeDashboardProps> = ({
   const [tailoredResumes, setTailoredResumes] = useState<TailoredResumeMetadata[]>([]);
   const [isLoadingTailored, setIsLoadingTailored] = useState<boolean>(false);
   const [previewTailoredUrl, setPreviewTailoredUrl] = useState<string | null>(null);
+  const [reviewTailoredItem, setReviewTailoredItem] = useState<TailoredResumeMetadata | null>(null);
 
   // Notification / Success Feedback
   const [notification, setNotification] = useState<string | null>(null);
@@ -744,10 +746,18 @@ export const ResumeDashboard: React.FC<ResumeDashboardProps> = ({
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setReviewTailoredItem(tr)}
+                      className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title="Inspect AI change tracking highlights, diffs, and review changes"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Review AI Changes
+                    </button>
                     <button
                       onClick={() => setPreviewTailoredUrl(`/api/resumes/${tr.tailored_resume_id || tr.id}/export?format=pdf&inline=true`)}
-                      className="px-2.5 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       Preview
@@ -1124,6 +1134,19 @@ export const ResumeDashboard: React.FC<ResumeDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 12. AI Change Tracking & Review Modal */}
+      {reviewTailoredItem && (
+        <TailoredResumeReviewModal
+          isOpen={Boolean(reviewTailoredItem)}
+          onClose={() => setReviewTailoredItem(null)}
+          tailoredResumeId={reviewTailoredItem.tailored_resume_id || reviewTailoredItem.id}
+          tailoredResumeName={reviewTailoredItem.name || reviewTailoredItem.tailored_resume_name}
+          sourceResumeName={reviewTailoredItem.source_resume_name}
+          targetJobTitle={reviewTailoredItem.target_job_title}
+          onRefresh={loadTailoredResumes}
+        />
       )}
     </div>
   );

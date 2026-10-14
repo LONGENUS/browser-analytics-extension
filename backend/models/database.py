@@ -696,6 +696,58 @@ class TailoredResume(Base):
 
 
 
+class ResumeChangeRecord(Base):
+    """Tracks structured change records associated with tailored resume generation (Module: Change Tracking)."""
+    __tablename__ = "resume_change_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_resume_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tailored_resume_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    section: Mapped[str] = mapped_column(String(100), nullable=False)
+    paragraph_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    section_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    item_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    change_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'added', 'modified', 'removed', 'unchanged'
+    original_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    proposed_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diff_segments: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="accepted", nullable=False)  # 'pending', 'accepted', 'rejected'
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "source_resume_id": self.source_resume_id,
+            "tailored_resume_id": self.tailored_resume_id,
+            "section": self.section,
+            "paragraph_id": self.paragraph_id,
+            "section_title": self.section_title,
+            "item_title": self.item_title,
+            "change_type": self.change_type,
+            "original_text": self.original_text,
+            "proposed_text": self.proposed_text,
+            "diff_segments": self.diff_segments,
+            "explanation": self.explanation,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 # --- Database Init ---
 async def init_db():
     """Create all tables if they don't exist and ensure columns exist."""

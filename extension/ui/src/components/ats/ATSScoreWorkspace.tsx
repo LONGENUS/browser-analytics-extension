@@ -18,6 +18,7 @@ import { matchingService, ATSScoreResult } from '../../services/matching.service
 import { tailoringService } from '../../services/tailoring.service';
 import { ResumeSummaryItem } from '../../types/resume';
 import { AuthUser } from '../../services/auth';
+import { TailoredResumeReviewModal } from '../resume/TailoredResumeReviewModal';
 
 interface ATSScoreWorkspaceProps {
   currentUser: AuthUser | null;
@@ -36,6 +37,9 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
   const [masterResumes, setMasterResumes] = useState<ResumeSummaryItem[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
   const [isLoadingResumes, setIsLoadingResumes] = useState<boolean>(true);
+
+  // Review Modal state for AI change tracking
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
 
   // Job Description state (persisted across tab switches via localStorage)
   const [jobDescription, setJobDescription] = useState<string>(() => {
@@ -56,6 +60,7 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
   const [tailorSuccess, setTailorSuccess] = useState<{
     tailored_resume_id: string;
     name: string;
+    source_resume_name?: string;
     job_title: string;
     download_pdf_url: string;
     download_docx_url: string;
@@ -176,11 +181,13 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
       setTailorSuccess({
         tailored_resume_id: res.tailored_resume_id,
         name: res.name,
+        source_resume_name: res.source_resume_name,
         job_title: res.target_job_title || 'Tailored Position',
         download_pdf_url: `/api/resumes/${res.tailored_resume_id}/export?format=pdf`,
         download_docx_url: `/api/resumes/${res.tailored_resume_id}/export?format=docx`,
         preview_url: `/api/resumes/${res.tailored_resume_id}/export?format=pdf&inline=true`,
       });
+      setIsReviewModalOpen(true);
     } catch (err: any) {
       setTailorError(err.message || 'Failed to generate tailored resume. Please try again.');
     } finally {
@@ -426,6 +433,15 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
+                    onClick={() => setIsReviewModalOpen(true)}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="Inspect AI change tracking highlights, diffs, and review changes"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Review AI Changes
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setPreviewUrl(tailorSuccess.preview_url)}
                     className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
                   >
@@ -435,7 +451,7 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDownload('pdf')}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
                     PDF
@@ -443,7 +459,7 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDownload('docx')}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
                     DOCX
@@ -466,7 +482,7 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Preview Modal */}
+      {/* Raw Preview Modal */}
       {previewUrl && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
           <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
@@ -492,6 +508,18 @@ export const ATSScoreWorkspace: React.FC<ATSScoreWorkspaceProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Change Tracking & Review Modal */}
+      {isReviewModalOpen && tailorSuccess && (
+        <TailoredResumeReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => setIsReviewModalOpen(false)}
+          tailoredResumeId={tailorSuccess.tailored_resume_id}
+          tailoredResumeName={tailorSuccess.name}
+          sourceResumeName={tailorSuccess.source_resume_name}
+          targetJobTitle={tailorSuccess.job_title}
+        />
       )}
     </div>
   );
