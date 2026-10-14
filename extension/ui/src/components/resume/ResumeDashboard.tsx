@@ -231,18 +231,13 @@ export const ResumeDashboard: React.FC<ResumeDashboardProps> = ({
       setIsImportModalOpen(false);
       setSelectedFile(null);
 
-      // Create draft resume object with temporary draft- ID for review mode
-      const draftResume: FullStructuredResume = {
-        ...result.parsed_resume,
-        id: `draft-${result.import_id}`,
-        user_id: '',
-        is_default: resumes.length === 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      // Reload resumes from backend to ensure the list and selectors update immediately
+      await loadResumes();
 
-      setActiveResume(draftResume);
-      showNotification('Resume extracted successfully! Please review before saving.');
+      // Set active resume to the real, persisted resume returned by the backend
+      const persistedResume = result.parsed_resume;
+      setActiveResume(persistedResume);
+      showNotification('Resume parsed and saved successfully! Your original document is ready for preview and tailoring.');
     } catch (err: any) {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);

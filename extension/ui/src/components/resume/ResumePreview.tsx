@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FullStructuredResume } from '../../types/resume';
 import { TemplateId, ZoomLevel } from '../../types/template';
 import { getTemplateConfig } from './templates/templateRegistry';
@@ -40,6 +40,16 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onUpdateRe
   const hasOriginalFile = !resume.is_tailored && Boolean(resume.original_file_path || resume.file_sha256 || resume.file_type);
   const [previewMode, setPreviewMode] = useState<'original' | 'structured'>(hasOriginalFile ? 'original' : 'structured');
   const [isDownloadingOriginal, setIsDownloadingOriginal] = useState<boolean>(false);
+
+  // Synchronize state when active resume changes
+  useEffect(() => {
+    setSelectedTemplateId((resume.template_id as TemplateId) || 'ats-classic');
+    if (!resume.is_tailored && (resume.original_file_path || resume.file_sha256 || resume.file_type)) {
+      setPreviewMode('original');
+    } else {
+      setPreviewMode('structured');
+    }
+  }, [resume.id, resume.is_tailored, resume.original_file_path, resume.file_sha256, resume.file_type, resume.template_id]);
 
   // Module 8: Export states
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);

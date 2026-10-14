@@ -130,62 +130,65 @@ async def execute_ai_tailoring_pipeline(
     change_log: List[Dict[str, Any]] = []
 
     # 7. Apply Audited Professional Summary
-    if options.adapt_summary and tailored.get("summary"):
-        orig_sum_obj = tailored["summary"]
+    if options.adapt_summary:
+        orig_sum_obj = tailored.get("summary") or {}
         orig_sum_text = orig_sum_obj.get("summary") or orig_sum_obj.get("content") or ""
-        new_sum_text = audited["sanitized_summary"]
+        new_sum_text = audited.get("sanitized_summary") or orig_sum_text
 
-        if audited["summary_is_rewritten"] and new_sum_text != orig_sum_text:
-            orig_sum_obj["summary"] = new_sum_text
-            orig_sum_obj["id"] = str(uuid.uuid4())
-            orig_sum_obj["resume_id"] = tailored["id"]
-
-            change_log.append({
-                "change_id": str(uuid.uuid4()),
-                "section": "summary",
-                "type": "adapt",
-                "source_id": "summary",
-                "original_text": orig_sum_text,
-                "tailored_text": new_sum_text,
-                "reason": audited["summary_reason"],
-                "is_safe": True,
-                "status": "pending",
-            })
-
-    # 8. Apply Audited & Prioritized Skills
-    if options.prioritize_skills and tailored.get("skills"):
-        orig_skills = tailored.get("skills", [])
-        sanitized_skills_list = audited["sanitized_skills"]
-
-        # Re-build skill entities with fresh UUIDs and sequential display_orders
-        skill_name_to_orig = {
-            (s.get("skill_name") or s.get("name") or "").strip().lower(): s
-            for s in orig_skills
-        }
-
-        new_skills = []
-        for idx, s_name in enumerate(sanitized_skills_list):
-            orig_record = skill_name_to_orig.get(s_name.lower())
-            new_skills.append({
+        if new_sum_text:
+            tailored["summary"] = {
                 "id": str(uuid.uuid4()),
                 "resume_id": tailored["id"],
-                "skill_name": s_name,
-                "category": orig_record.get("category", "Technical") if orig_record else "Technical",
-                "display_order": idx,
-            })
+                "summary": new_sum_text,
+            }
 
-        tailored["skills"] = new_skills
-        change_log.append({
-            "change_id": str(uuid.uuid4()),
-            "section": "skills",
-            "type": "reorder",
-            "source_id": "skills_section",
-            "original_text": f"{len(orig_skills)} skills in original order",
-            "tailored_text": f"Prioritized {len(sanitized_skills_list)} skills based on job requirements",
-            "reason": "Reordered relevant skills to match job description.",
-            "is_safe": True,
-            "status": "accepted",
-        })
+            if audited.get("summary_is_rewritten") and new_sum_text != orig_sum_text:
+                change_log.append({
+                    "change_id": str(uuid.uuid4()),
+                    "section": "summary",
+                    "type": "adapt",
+                    "source_id": "summary",
+                    "original_text": orig_sum_text,
+                    "tailored_text": new_sum_text,
+                    "reason": audited.get("summary_reason") or "Adapted summary for target job requirements.",
+                    "is_safe": True,
+                    "status": "pending",
+                })
+
+    # 8. Apply Audited & Prioritized Skills
+    if options.prioritize_skills:
+        orig_skills = tailored.get("skills") or []
+        sanitized_skills_list = audited.get("sanitized_skills") or []
+
+        if sanitized_skills_list:
+            skill_name_to_orig = {
+                (s.get("skill_name") or s.get("name") or "").strip().lower(): s
+                for s in orig_skills
+            }
+
+            new_skills = []
+            for idx, s_name in enumerate(sanitized_skills_list):
+                orig_record = skill_name_to_orig.get(s_name.lower())
+                new_skills.append({
+                    "id": str(uuid.uuid4()),
+                    "resume_id": tailored["id"],
+                    "skill_name": s_name,
+                    "category": orig_record.get("category", "Technical") if orig_record else "Technical",
+                    "display_order": idx,
+                })
+
+            tailored["skills"] = new_skills
+            change_log.append({
+                "change_id": str(uuid.uuid4()),
+                "section": "skills",
+                "type": "reorder",
+                "source_id": "skills_section",
+                "original_text": f"{len(orig_skills)} skills in original order",
+                "tailored_text": f"Prioritized {len(sanitized_skills_list)} skills based on job requirements",
+                "reason": "Reordered relevant skills to match job description.",
+                "is_safe": True,
+                "status": "accepted",
+            })
 
     # 9. Apply Audited Experience Bullets
     audited_exps = audited["audited_experiences"]

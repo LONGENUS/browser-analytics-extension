@@ -304,69 +304,21 @@ class ResumeService {
    * Uploads and parses an existing resume file (PDF or DOCX).
    */
   async uploadAndParseResume(file: File): Promise<ResumeImportResult> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+    const formData = new FormData();
+    formData.append('file', file);
 
-      const resp = await authenticatedFetch('/api/resumes/import', {
-        method: 'POST',
-        body: formData,
-      });
+    const resp = await authenticatedFetch('/api/resumes/import', {
+      method: 'POST',
+      body: formData,
+    });
 
-      if (resp.ok) {
-        return resp.json();
-      }
-    } catch (_) {}
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Resume upload and parsing failed (${resp.status})`);
+    }
 
-    // Deterministic client fallback:
-    const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[_\-]+/g, ' ');
-    const now = new Date().toISOString();
-    const importId = `import-${Date.now()}`;
-    const parsed: FullStructuredResume = {
-      id: `draft-${importId}`,
-      user_id: '',
-      name: baseName || 'Imported Resume',
-      is_default: false,
-      status: 'draft',
-      template_id: 'ats-classic',
-      template_version: 'v1.0.0',
-      personal_info: {
-        full_name: baseName.split(' ')[0] ? baseName : 'Candidate',
-        email: '',
-        phone: '',
-        location: '',
-        headline: 'Professional',
-        website: '',
-        linkedin_url: '',
-        github_url: '',
-        portfolio_url: '',
-      },
-      summary: { summary: 'Imported resume draft. Review your details and click Save when ready.' },
-      experiences: [],
-      educations: [],
-      skills: [
-        {
-          id: 'skill-1',
-          skill_name: 'Communication',
-          category: 'Core Skills',
-          display_order: 1,
-        },
-      ],
-      projects: [],
-      certifications: [],
-      links: [],
-      created_at: now,
-      updated_at: now,
-    };
-
-    return {
-      import_id: importId,
-      filename: file.name,
-      file_size: file.size,
-      file_type: file.name.toLowerCase().endsWith('.docx') ? 'docx' : 'pdf',
-      status: 'review_required',
-      parsed_resume: parsed,
-    };
+    const data: ResumeImportResult = await resp.json();
+    return data;
   }
 
   /**

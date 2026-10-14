@@ -33,6 +33,7 @@ from models.database import (
     ResumeProjectBullet,
     ResumeCertification,
     ResumeLink,
+    ResumeImport,
     TailoredResume,
     JobMatch,
 )
@@ -311,34 +312,59 @@ async def download_original_master_resume(
     from services.storage import retrieve_master_resume_file, MasterResumeTamperError
 
     user_id = current_user["id"]
+    clean_id = resume_id.removeprefix("draft-")
+
+    # 1. Look up in resumes table
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+        select(Resume).where(
+            (Resume.id == resume_id) | (Resume.id == clean_id),
+            Resume.user_id == user_id,
+        )
     )
     resume = result.scalar_one_or_none()
-    if not resume:
+
+    storage_path = None
+    expected_sha256 = None
+    file_type = None
+    original_filename = None
+
+    if resume:
+        # Master Preview Guarantee: Tailored resumes are generated representations, NOT original master documents
+        if resume.is_tailored:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Original document preview is only available for master resumes. Tailored resumes are generated representations."
+            )
+        storage_path = resume.original_file_path
+        expected_sha256 = resume.file_sha256
+        file_type = resume.file_type
+        original_filename = resume.original_filename
+    else:
+        # 2. Look up in resume_imports table as fallback
+        import_result = await db.execute(
+            select(ResumeImport).where(
+                (ResumeImport.id == resume_id) | (ResumeImport.id == clean_id),
+                ResumeImport.user_id == user_id,
+            )
+        )
+        import_rec = import_result.scalar_one_or_none()
+        if import_rec:
+            storage_path = import_rec.storage_path
+            expected_sha256 = import_rec.file_sha256
+            file_type = import_rec.file_type
+            original_filename = import_rec.original_filename
+
+    if not storage_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found or access denied."
-        )
-
-    # Master Preview Guarantee: Tailored resumes are generated representations, NOT original master documents
-    if resume.is_tailored:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Original document preview is only available for master resumes. Tailored resumes are generated representations."
-        )
-
-    if not resume.original_file_path or not os.path.exists(resume.original_file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Original master resume document file is not available."
+            detail="Original master resume document file is not available or not found."
         )
 
     # Verify supported format (PDF or DOCX)
     ext = None
-    if resume.file_type == "docx" or (resume.original_filename and resume.original_filename.lower().endswith(".docx")):
+    if file_type == "docx" or (original_filename and original_filename.lower().endswith(".docx")):
         ext = "docx"
-    elif resume.file_type == "pdf" or (resume.original_filename and resume.original_filename.lower().endswith(".pdf")):
+    elif file_type == "pdf" or (original_filename and original_filename.lower().endswith(".pdf")):
         ext = "pdf"
 
     if not ext:
@@ -349,7 +375,12 @@ async def download_original_master_resume(
 
     try:
         content = retrieve_master_resume_file(
-            resume.original_file_path, expected_sha256=resume.file_sha256
+            storage_path, expected_sha256=expected_sha256
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Original master resume document file is not available or not found."
         )
     except MasterResumeTamperError as mte:
         raise HTTPException(
@@ -363,7 +394,7 @@ async def download_original_master_resume(
         )
 
     media_type = "application/pdf" if ext == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    filename = resume.original_filename or f"master_resume_{resume.id}.{ext}"
+    filename = original_filename or f"master_resume_{clean_id}.{ext}"
     disposition_type = "inline" if inline else "attachment"
 
     return Response(
@@ -371,10 +402,13 @@ async def download_original_master_resume(
         media_type=media_type,
         headers={
             "Content-Disposition": f'{disposition_type}; filename="{filename}"',
-            "X-Resume-SHA256": resume.file_sha256 or "",
+            "Content-Length": str(len(content)),
+            "X-Resume-Id": clean_id,
+            "X-Resume-SHA256": expected_sha256 or "",
             "X-File-Type": ext,
             "Access-Control-Expose-Headers": "Content-Disposition, X-Resume-SHA256, X-File-Type",
-        }
+            "X-Is-Master-Resume": "true",
+        },
     )
 
 

@@ -112,9 +112,23 @@ def validate_and_filter_ai_output(
     sanitized_summary = orig_summary
     summary_is_rewritten = False
 
+    # Metric source context: summary can reference metrics/years grounded anywhere in the source resume
+    full_source_text_parts = [orig_summary]
+    for exp in source_resume.get("experiences") or []:
+        if exp.get("description"):
+            full_source_text_parts.append(exp["description"])
+        for b in exp.get("bullets") or []:
+            b_text = b.get("content", "") if isinstance(b, dict) else str(b)
+            if b_text:
+                full_source_text_parts.append(b_text)
+    for p in source_resume.get("projects") or []:
+        if p.get("description"):
+            full_source_text_parts.append(p["description"])
+    full_source_context = " ".join(full_source_text_parts)
+
     if raw_summary and isinstance(raw_summary, str) and raw_summary.strip() != orig_summary.strip():
-        # Deterministic check for numbers & metrics and unsupported tech
-        is_valid, reason = validate_factual_grounding(raw_summary, orig_summary, allowed_techs)
+        # Deterministic check for numbers & metrics and unsupported tech against full resume context
+        is_valid, reason = validate_factual_grounding(raw_summary, full_source_context, allowed_techs)
         if is_valid:
             sanitized_summary = raw_summary.strip()
             summary_is_rewritten = True
